@@ -18,11 +18,11 @@ Compatibilité : PHP 7.4 → 8.4, WordPress 5.8+, MySQL 5.6+ / MariaDB 10.1+. Au
 
 ### A. Migration classique (archive + installer.php)
 
-1. **Sur le site à migrer** : *Lwb Migration → Exporter*. Cliquez sur « Générer » pour créer un mot de passe d'installeur (notez-le), puis **Exporter le site**. Si la connexion coupe, l'export reprend tout seul au dernier point de sauvegarde (bouton « Reprendre » sinon).
+1. **Sur le site à migrer** : *Lwb Migration → Exporter*. Saisissez un mot de passe d'installeur (obligatoire) ou laissez le champ vide : il est alors généré et affiché à la fin de l'export (notez-le). Cliquez ensuite sur **Exporter le site**. Si la connexion coupe, l'export reprend tout seul au dernier point de sauvegarde (bouton « Reprendre » sinon).
 2. Téléchargez **l'archive** et **installer.php**.
 3. **Sur le nouveau serveur** : créez la base de données dans le panneau de l'hébergeur (ou laissez l'installeur la créer si vos droits le permettent), puis envoyez les deux fichiers par FTP (mode binaire) à la racine du site.
 4. Ouvrez `https://votre-domaine/installer.php` et saisissez le mot de passe.
-5. **Étape 1 – Vérification** : tout doit être vert ou orange. **Étape 2 – Base de données** : hôte, nom, utilisateur, mot de passe, préfixe (modifiable). Cliquez sur **Tester la connexion**, puis **Lancer l'installation**. L'adresse et le dossier du nouveau site sont détectés automatiquement (dépliez la section pour les corriger).
+5. **Étape 1 – Vérification** : tout doit être vert ou orange. **Étape 2 – Base de données** : hôte, nom, utilisateur, mot de passe, préfixe (modifiable). Cliquez sur **Tester la connexion**, puis **Lancer l'installation**. L'adresse et le dossier du nouveau site sont détectés automatiquement (dépliez la section pour les corriger). Par défaut, les extensions et thèmes du serveur absents du site source sont mis de côté dans `wp-content/lwb-mis-de-cote-…/`.
 6. Les étapes extraction → import SQL → rechercher/remplacer → finalisation s'enchaînent. Si vous fermez la page, rouvrez-la : l'installation reprend.
 7. À la fin, cliquez sur **Supprimer les fichiers d'installation et ouvrir l'administration**, puis connectez-vous avec les identifiants **du site source**.
 
@@ -53,7 +53,7 @@ Format d'archive (automatique / ZIP / LWB), compression, exclusions par défaut 
 | Dump SQL | Lecture non bufferisée ligne par ligne, pagination par clé primaire, lots adaptatifs (~2 Mo), `INSERT` multi-lignes ≤ 1 Mo, BLOB en hexadécimal. |
 | Archive | ZIP standard (ZIP64 au besoin) écrit en flux en PHP pur, CRC32 combiné entre requêtes pour les gros fichiers. Repli « LWB » : fichiers concaténés + index JSON. |
 | Rechercher/remplacer | Analyse et reconstruction des données sérialisées (longueurs recalculées, objets jamais instanciés), variantes JSON / URL-encodées / sans protocole, remplacement en une passe (pas de double remplacement). |
-| Sécurité | `manage_options` + nonces, stockage `uploads/lwb-migration-<aléatoire>/` protégé, mot de passe d'installeur (bcrypt, limitation des tentatives), cookies signés + jeton CSRF, protection « zip slip », HMAC-SHA256 par morceau en migration directe. |
+| Sécurité | `manage_options` + nonces, stockage `uploads/lwb-migration-<aléatoire>/` protégé, mot de passe d'installeur obligatoire (bcrypt, tentatives limitées par adresse IP), installeur qui expire s'il n'a pas servi, mot de passe de la base jamais renvoyé au navigateur, cookies signés + jeton CSRF, protection « zip slip », HMAC-SHA256 par morceau en migration directe. |
 
 > Pourquoi le ZIP n'est-il pas écrit avec `ZipArchive` ? `ZipArchive::close()` réécrit toute l'archive à chaque appel : en traitement par lots, cela devient quadratique et dépasse 30 s sur un gros site. L'écriture en flux en PHP pur produit un ZIP standard, lisible par `ZipArchive`, `unzip` ou Windows, et fonctionne partout.
 
@@ -70,9 +70,11 @@ php bin/build.php                                    # dist/lwb-migration.zip
 
 ## Publier une nouvelle version
 
+> **Prérequis (une seule fois)** : le secret GitHub `LWB_SIGNING_SEED` (Settings › Secrets and variables › Actions) contient la graine Ed25519 dont la clé publique est `Updater::PUBLIC_KEY`. Sans lui, la publication échoue volontairement.
+
 1. Mettez à jour `Version` et `LWB_MIGRATION_VERSION` dans `lwb-migration.php`, `Stable tag` et la section `= x.y.z =` du Changelog dans `readme.txt`.
 2. Poussez, puis **au choix** : `git tag v1.2.0 && git push origin v1.2.0`, ou GitHub › Actions › **Release** › *Run workflow*.
 3. La GitHub Action teste (PHP 7.4 et 8.4), construit `lwb-migration.zip` et `latest.json`, puis publie la release.
-4. Aussitôt : le bouton de téléchargement de https://lewebmax.com/lwb-migration/ pointe vers la nouvelle version, et chaque site équipé la voit dans *Extensions › Mises à jour* (vérification toutes les 12 h, ou bouton « Vérifier »). L'empreinte SHA-256 du zip est contrôlée avant installation.
+4. Aussitôt : le bouton de téléchargement de https://lewebmax.com/lwb-migration/ pointe vers la nouvelle version, et chaque site équipé la voit dans *Extensions › Mises à jour* (vérification toutes les 12 h, ou bouton « Vérifier »). La signature Ed25519 du manifeste et l'empreinte SHA-256 du zip sont contrôlées avant installation : une publication non signée est refusée.
 
 Le scénario de bout en bout installe un WordPress source dans un sous-dossier (préfixe `srcwp_`, contenus sérialisés, JSON, binaires, fichier de 30 Mo). Il l'exporte puis l'installe sur un autre domaine, dans un autre dossier, une autre base et avec un autre préfixe, en étapes de 0,25 s et avec des coupures réseau simulées. Il vérifie ensuite qu'aucune ancienne URL ni aucun ancien chemin ne subsiste, que le site répond et que la connexion admin fonctionne. Il couvre aussi la migration directe et le format LWB.

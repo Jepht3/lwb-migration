@@ -27,7 +27,7 @@ jobs:
       LWB_TEST_DB_USER: root
       LWB_TEST_DB_PASSWORD: root
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}

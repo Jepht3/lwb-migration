@@ -19,6 +19,16 @@ defined( 'ABSPATH' ) || exit;
 class Installer_Builder {
 
 	/**
+	 * Emplacement de la configuration dans le modèle.
+	 */
+	const CONFIG_MARKER = '#/\*LWB_CONFIG_START\*/.*?/\*LWB_CONFIG_END\*/\s*;?#s';
+
+	/**
+	 * Taille maximale d'un installeur portable reçu (police embarquée comprise).
+	 */
+	const MAX_PORTABLE_SIZE = 4194304;
+
+	/**
 	 * Bibliothèques intégrées, dans l'ordre de dépendance.
 	 *
 	 * @var string[]
@@ -44,6 +54,20 @@ class Installer_Builder {
 	 * @throws Migration_Exception Modèle introuvable.
 	 */
 	public static function render( array $config ) {
+		return self::inject_config( self::render_portable(), $config );
+	}
+
+	/**
+	 * Construit le code de l'installeur sans configuration (marqueurs conservés).
+	 *
+	 * En migration directe, la source envoie ce code à la destination, qui y injecte sa
+	 * configuration : le site est ainsi installé avec l'installeur de la source, même si
+	 * l'extension de la destination est plus ancienne.
+	 *
+	 * @return string
+	 * @throws Migration_Exception Modèle introuvable.
+	 */
+	public static function render_portable() {
 		$code  = "<?php\n";
 		$code .= "/**\n * Lwb Migration – installeur autonome.\n *\n * Déposez ce fichier et l'archive à la racine du site de destination,\n * puis ouvrez https://votre-domaine/installer.php dans votre navigateur.\n *\n * Généré le " . gmdate( 'Y-m-d H:i:s' ) . ' UTC par Lwb Migration ' . LWB_MIGRATION_VERSION . ".\n */\n\n";
 		$code .= "namespace LwbMigration;\n\n";
@@ -52,20 +76,7 @@ class Installer_Builder {
 			$code .= "\n" . self::strip_open_tag( self::read( LWB_MIGRATION_DIR . 'includes/' . $lib ) );
 		}
 		$template = self::strip_open_tag( self::read( LWB_MIGRATION_DIR . 'installer/installer-template.php' ) );
-		$export   = var_export( $config, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- génération de code.
-		$count    = 0;
-		$template = preg_replace_callback(
-			'#/\*LWB_CONFIG_START\*/.*?/\*LWB_CONFIG_END\*/\s*;?#s',
-			function () use ( $export ) {
-				// Le point-virgule est fourni ici : la mise en forme automatique du modèle peut le
-				// déplacer à l'intérieur des marqueurs.
-				return $export . ';';
-			},
-			$template,
-			1,
-			$count
-		);
-		if ( 1 !== $count ) {
+		if ( 1 !== preg_match_all( self::CONFIG_MARKER, $template ) ) {
 			throw new Migration_Exception( 'Modèle d’installeur invalide.', 'Réinstallez l’extension Lwb Migration.' );
 		}
 		$font     = LWB_MIGRATION_DIR . 'assets/fonts/plus-jakarta-sans.woff2';
@@ -83,15 +94,56 @@ class Installer_Builder {
 	}
 
 	/**
+	 * Injecte la configuration dans un installeur portable.
+	 *
+	 * @param string $code   Code produit par render_portable().
+	 * @param array  $config Configuration.
+	 * @return string
+	 * @throws Migration_Exception Code d'installeur invalide.
+	 */
+	public static function inject_config( $code, array $config ) {
+		if ( ! self::is_portable( $code ) ) {
+			throw new Migration_Exception( 'Modèle d’installeur invalide.', 'Réinstallez l’extension Lwb Migration.' );
+		}
+		$export = var_export( $config, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- génération de code.
+		return (string) preg_replace_callback(
+			self::CONFIG_MARKER,
+			function () use ( $export ) {
+				// Le point-virgule est fourni ici : la mise en forme automatique du modèle peut le
+				// déplacer à l'intérieur des marqueurs.
+				return $export . ';';
+			},
+			$code,
+			1
+		);
+	}
+
+	/**
+	 * Code d'installeur portable valide (reçu de la source en migration directe) ?
+	 *
+	 * @param string $code Code.
+	 * @return bool
+	 */
+	public static function is_portable( $code ) {
+		$code = (string) $code;
+		return strlen( $code ) <= self::MAX_PORTABLE_SIZE
+			&& 0 === strpos( $code, "<?php\n" )
+			&& false !== strpos( $code, "\\define( 'LWB_MIGRATION_STANDALONE', true );" )
+			&& false !== strpos( $code, 'namespace LwbMigration\\Installer;' )
+			&& 1 === preg_match_all( self::CONFIG_MARKER, $code );
+	}
+
+	/**
 	 * Écrit l'installeur sur disque.
 	 *
-	 * @param string $target Chemin.
-	 * @param array  $config Configuration.
+	 * @param string      $target   Chemin.
+	 * @param array       $config   Configuration.
+	 * @param string|null $portable Installeur portable fourni par la source (null : celui de ce site).
 	 * @return int Taille.
 	 * @throws Migration_Exception Écriture impossible.
 	 */
-	public static function build( $target, array $config ) {
-		$code = self::render( $config );
+	public static function build( $target, array $config, $portable = null ) {
+		$code = null === $portable ? self::render( $config ) : self::inject_config( $portable, $config );
 		if ( false === file_put_contents( $target, $code ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 			throw new Migration_Exception(
 				__( 'Impossible d’écrire installer.php.', 'lwb-migration' ),

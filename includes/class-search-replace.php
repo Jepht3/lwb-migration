@@ -91,24 +91,33 @@ class Search_Replace {
 			if ( '' === $old || $old === $new ) {
 				continue;
 			}
-			$variants = array( $old );
-			if ( 0 === strpos( $old, 'https://' ) ) {
-				$variants[] = 'http://' . substr( $old, 8 );
-			} elseif ( 0 === strpos( $old, 'http://' ) ) {
-				$variants[] = 'https://' . substr( $old, 7 );
+			// Même site avec ou sans « www. » (contenus saisis sous l'autre forme du domaine).
+			$hosts = array( $old );
+			$alt   = self::toggle_www( $old );
+			// Sauf si cette autre forme est (le début de) la nouvelle adresse.
+			if ( null !== $alt && 0 !== strpos( strtolower( $new ) . '/', strtolower( rtrim( $alt, '/' ) ) . '/' ) ) {
+				$hosts[] = $alt;
 			}
-			foreach ( $variants as $variant ) {
-				$add( $variant, $new );
-				$add( self::json_escape( $variant ), self::json_escape( $new ) );
-				$add( rawurlencode( $variant ), rawurlencode( $new ) );
-			}
-			// URL relative au protocole (//domaine.tld/chemin).
-			$old_rel = self::strip_scheme( $old );
 			$new_rel = self::strip_scheme( $new );
-			if ( null !== $old_rel && null !== $new_rel ) {
-				$add( $old_rel, $new_rel );
-				$add( self::json_escape( $old_rel ), self::json_escape( $new_rel ) );
-				$add( rawurlencode( $old_rel ), rawurlencode( $new_rel ) );
+			foreach ( $hosts as $host_variant ) {
+				$variants = array( $host_variant );
+				if ( 0 === strpos( $host_variant, 'https://' ) ) {
+					$variants[] = 'http://' . substr( $host_variant, 8 );
+				} elseif ( 0 === strpos( $host_variant, 'http://' ) ) {
+					$variants[] = 'https://' . substr( $host_variant, 7 );
+				}
+				foreach ( $variants as $variant ) {
+					$add( $variant, $new );
+					$add( self::json_escape( $variant ), self::json_escape( $new ) );
+					$add( rawurlencode( $variant ), rawurlencode( $new ) );
+				}
+				// URL relative au protocole (//domaine.tld/chemin).
+				$old_rel = self::strip_scheme( $host_variant );
+				if ( null !== $old_rel && null !== $new_rel ) {
+					$add( $old_rel, $new_rel );
+					$add( self::json_escape( $old_rel ), self::json_escape( $new_rel ) );
+					$add( rawurlencode( $old_rel ), rawurlencode( $new_rel ) );
+				}
 			}
 		}
 		foreach ( $paths as $old => $new ) {
@@ -150,6 +159,27 @@ class Search_Replace {
 			return null;
 		}
 		return substr( $url, $pos + 1 );
+	}
+
+	/**
+	 * Même URL avec ou sans « www. » devant le domaine (null pour une IP ou localhost).
+	 *
+	 * @param string $url URL absolue.
+	 * @return string|null
+	 */
+	public static function toggle_www( $url ) {
+		if ( ! preg_match( '#^(https?://)([^/:?\#]+)(.*)$#i', (string) $url, $m ) ) {
+			return null;
+		}
+		$host = strtolower( $m[2] );
+		if ( false === strpos( $host, '.' ) || filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return null;
+		}
+		$host = 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : 'www.' . $host;
+		if ( false === strpos( $host, '.' ) ) {
+			return null; // « www.localhost » → « localhost » : pas un vrai domaine.
+		}
+		return $m[1] . $host . $m[3];
 	}
 
 	/**

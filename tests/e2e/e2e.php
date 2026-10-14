@@ -766,10 +766,12 @@ step( 'Scénario 3 – Format LWB (repli PHP pur), installation dans un sous-dos
 list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'settings_save', array( 'settings' => array( 'format' => 'lwb', 'compress' => '1', 'default_exclude' => '1', 'keep_packages' => '5', 'exclude_exts' => 'log' ) ) );
 ok( ! empty( $j['success'] ), 'réglage « format LWB » enregistré' );
 list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'export_start', array( 'password' => '' ) );
+$pkg3_pw = isset( $j['data']['password'] ) ? (string) $j['data']['password'] : '';
+ok( 16 === strlen( $pkg3_pw ), 'mot de passe vide : un mot de passe est généré et renvoyé une fois' );
 drive_job( $admin, $src_url, $nonce, $j['data']['job'], false );
 list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'packages' );
 $pkg3 = $j['data'][0];
-ok( 'LWB' === $pkg3['format'] && ! $pkg3['protected'], 'paquet au format LWB, sans mot de passe' );
+ok( 'LWB' === $pkg3['format'] && $pkg3['protected'], 'paquet au format LWB, protégé par le mot de passe généré' );
 
 $d3_root = E2E_WORK . '/dst3';
 $d3_abs  = "$d3_root/sous-dossier";
@@ -797,7 +799,8 @@ list( $api3, $final3 ) = drive_installer(
 		'prefix'   => 'srcwp_',
 		'site_url' => $d3_url,
 		'home_url' => $d3_url,
-	)
+	),
+	$pkg3_pw
 );
 verify_site( 'lwb', $d3_url, $d3_abs, 'lwb_e2e_d3', 'srcwp_', $src_url, $src_abs );
 $api3( 'cleanup' );
@@ -806,7 +809,7 @@ $api3( 'cleanup' );
 /* Scénario 4 : mises à jour automatiques                                */
 /* ================================================================== */
 
-step( 'Scénario 4 – Mises à jour automatiques (wordpress.org injoignable, vérification SHA-256)' );
+step( 'Scénario 4 – Mises à jour automatiques (wordpress.org injoignable, signature Ed25519 et SHA-256)' );
 @mkdir( "$src_abs/wp-content/temp", 0755, true );
 // Paquet « 9.9.9 » construit à partir de l'extension courante.
 $upd_dir = E2E_WORK . '/update';
@@ -837,9 +840,26 @@ $manifest = array(
 	'published'    => gmdate( 'Y-m-d H:i:s' ),
 	'changelog'    => array( 'Version de test' ),
 );
-file_put_contents( "$src_root/manifest.json", json_encode( $manifest ) );
+// Publications signées avec une clé de test (acceptée seulement en mode LWB_MIGRATION_ALLOW_HTTP).
+$upd_keys = sodium_crypto_sign_keypair();
+$sign     = function ( array $m ) use ( $upd_keys ) {
+	$m['signature'] = base64_encode( sodium_crypto_sign_detached( implode( "\n", array( 'lwb-migration-release-v1', $m['version'], $m['zip_url'], $m['sha256'] ) ), sodium_crypto_sign_secretkey( $upd_keys ) ) );
+	return $m;
+};
 @mkdir( "$src_abs/wp-content/mu-plugins" );
-file_put_contents( "$src_abs/wp-content/mu-plugins/lwb-test-manifest.php", "<?php add_filter( 'lwb_migration_update_manifest', function () { return 'http://127.0.0.1:8101/manifest.json'; } );\n" );
+file_put_contents(
+	"$src_abs/wp-content/mu-plugins/lwb-test-manifest.php",
+	"<?php add_filter( 'lwb_migration_update_manifest', function () { return 'http://127.0.0.1:8101/manifest.json'; } );\n"
+	. "add_filter( 'lwb_migration_update_public_key', function () { return '" . base64_encode( sodium_crypto_sign_publickey( $upd_keys ) ) . "'; } );\n"
+);
+
+// Manifeste non signé : jamais proposé.
+file_put_contents( "$src_root/manifest.json", json_encode( $manifest ) );
+$unsigned = run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; wp_set_current_user( 1 ); echo json_encode( \LwbMigration\Updater::check_now() );' );
+$unsigned = json_decode( substr( $unsigned, strpos( $unsigned, '{' ) ), true );
+ok( empty( $unsigned['has_update'] ), 'publication non signée ignorée' ) || print( '    ' . json_encode( $unsigned, JSON_UNESCAPED_UNICODE ) . "\n" );
+
+file_put_contents( "$src_root/manifest.json", json_encode( $sign( $manifest ) ) );
 
 $check = run_wp_php(
 	$src_abs,
@@ -866,7 +886,7 @@ $bad = json_decode( substr( $o = run_wp_php( $src_abs, $upgrade ), strpos( $o, '
 ok( $cur_v === $bad['version'] && false !== strpos( implode( ' ', $bad['messages'] ), 'SHA-256' ), 'zip à l’empreinte SHA-256 incorrecte refusé (extension inchangée)' ) || print( '    ' . json_encode( $bad, JSON_UNESCAPED_UNICODE ) . "\n" );
 
 $manifest['sha256'] = hash_file( 'sha256', $zipfile );
-file_put_contents( "$src_root/manifest.json", json_encode( $manifest ) );
+file_put_contents( "$src_root/manifest.json", json_encode( $sign( $manifest ) ) );
 run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; \LwbMigration\Updater::check_now();' );
 $good = json_decode( substr( $o = run_wp_php( $src_abs, $upgrade ), strpos( $o, '{' ) ), true );
 ok( '9.9.9' === $good['version'], 'mise à jour authentique installée (version ' . $good['version'] . ')' ) || print( '    ' . json_encode( $good, JSON_UNESCAPED_UNICODE ) . "\n" );

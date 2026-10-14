@@ -64,7 +64,11 @@ class Ajax {
 			$job = Exporter::start( array( 'password' => $password ) );
 			wp_send_json_success(
 				array_merge(
-					array( 'job' => $job->id() ),
+					array(
+						'job'      => $job->id(),
+						// Mot de passe saisi, ou généré si le champ était vide : affiché une seule fois.
+						'password' => (string) $job->data['password'],
+					),
 					Exporter::status( $job )
 				)
 			);

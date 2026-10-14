@@ -48,11 +48,30 @@ if ( ! is_file( $zip ) ) {
 	exit( 1 );
 }
 
+// Signature Ed25519 : graine de 32 octets (base64) dans le secret GitHub LWB_SIGNING_SEED.
+$seed = base64_decode( (string) getenv( 'LWB_SIGNING_SEED' ), true );
+if ( false === $seed || 32 !== strlen( $seed ) ) {
+	fwrite( STDERR, "Secret LWB_SIGNING_SEED absent ou invalide : impossible de signer la publication.\n" );
+	exit( 1 );
+}
+$pair       = sodium_crypto_sign_seed_keypair( $seed );
+$public_b64 = base64_encode( sodium_crypto_sign_publickey( $pair ) );
+$updater    = file_get_contents( $root . '/includes/class-updater.php' );
+if ( ! preg_match( "/const PUBLIC_KEY = '([^']+)'/", $updater, $pk ) || $pk[1] !== $public_b64 ) {
+	fwrite( STDERR, "LWB_SIGNING_SEED ne correspond pas à Updater::PUBLIC_KEY : les sites refuseraient cette mise à jour.\n" );
+	exit( 1 );
+}
+
+$zip_url = "https://github.com/$repo/releases/download/v$version/lwb-migration.zip";
+$sha256  = hash_file( 'sha256', $zip );
+$message = implode( "\n", array( 'lwb-migration-release-v1', $version, $zip_url, $sha256 ) );
+
 $manifest = array(
 	'name'         => 'Lwb Migration',
 	'version'      => $version,
-	'zip_url'      => "https://github.com/$repo/releases/download/v$version/lwb-migration.zip",
-	'sha256'       => hash_file( 'sha256', $zip ),
+	'zip_url'      => $zip_url,
+	'sha256'       => $sha256,
+	'signature'    => base64_encode( sodium_crypto_sign_detached( $message, sodium_crypto_sign_secretkey( $pair ) ) ),
 	'size'         => filesize( $zip ),
 	'requires'     => $wp[1],
 	'requires_php' => $php[1],

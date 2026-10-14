@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.4
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,20 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.3.0 =
+* Sécurité : le mot de passe de l'installeur est désormais obligatoire. Laissé vide, il est généré automatiquement et affiché à la fin de l'export. Un installer.php sans mot de passe refuse de s'exécuter
+* Sécurité : l'installeur ne renvoie plus jamais le mot de passe de la base de données au navigateur (le champ reste vide, la valeur enregistrée est utilisée côté serveur)
+* Sécurité : un installeur inutilisé se supprime tout seul (24 h après sa création en migration directe, 7 jours après sa première ouverture pour un export)
+* Sécurité : les tentatives de mot de passe sont limitées par adresse IP (un inconnu ne peut plus bloquer le propriétaire), avec un plafond global
+* Sécurité : les mises à jour sont signées (Ed25519). Une publication non signée par LEWEBMAX n'est jamais proposée ni installée
+* Migration directe : le site est installé avec l'installeur du site source, même si l'extension de la destination est plus ancienne
+* Rechercher/remplacer : le domaine avec et sans « www. » est remplacé (liens saisis sous l'autre forme du domaine)
+* Caches des constructeurs vidés aussi pour Divi et Beaver Builder
+* Nouvelle option (activée par défaut) : les extensions et thèmes présents sur le serveur de destination mais absents du site source sont mis de côté dans wp-content/lwb-mis-de-cote-…/
+* Contrôle du site à la fin de l'installation : page d'accueil, liens vers l'ancien domaine, feuilles de style et scripts introuvables, page de connexion
+* Si le site migré affiche une « erreur critique », l'installeur trouve et désactive l'extension en cause
+* Fin d'installation : rappels adaptés au site (indexation bloquée, adresse de connexion WPS Hide Login, Wordfence, Novamira, licences liées au domaine)
 
 = 1.2.4 =
 * Migration directe : le transfert est refusé si le site de destination a une version de Lwb Migration plus ancienne que le site source. C'est la destination qui construit l'installeur : une version ancienne installait le site sans les derniers correctifs (par exemple, avec la 1.2.2, les caches Elementor n'étaient pas vidés). Un message indique de mettre à jour l'extension sur la destination, puis de relancer

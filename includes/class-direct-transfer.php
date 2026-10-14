@@ -200,6 +200,9 @@ class Direct_Transfer {
 				case 'upload':
 					wp_send_json( self::receive_chunk( $kid, $offset, $body ) );
 					break;
+				case 'installer':
+					wp_send_json( self::receive_installer( $kid, $body ) );
+					break;
 				case 'finalize':
 					wp_send_json( self::receive_finalize( $data, $extra ) );
 					break;
@@ -295,15 +298,39 @@ class Direct_Transfer {
 			$chunk = min( $chunk, (int) ( $mem / 8 ) );
 		}
 		return array(
-			'site_url'       => site_url(),
-			'wp_version'     => get_bloginfo( 'version' ),
-			'php_version'    => PHP_VERSION,
-			'plugin_version' => LWB_MIGRATION_VERSION,
-			'format_version' => Exporter::FORMAT_VERSION,
-			'chunk'          => max( self::MIN_CHUNK, $chunk ),
-			'zlib'           => function_exists( 'gzinflate' ),
-			'mask'           => 1,
+			'site_url'         => site_url(),
+			'wp_version'       => get_bloginfo( 'version' ),
+			'php_version'      => PHP_VERSION,
+			'plugin_version'   => LWB_MIGRATION_VERSION,
+			'format_version'   => Exporter::FORMAT_VERSION,
+			'chunk'            => max( self::MIN_CHUNK, $chunk ),
+			'zlib'             => function_exists( 'gzinflate' ),
+			'mask'             => 1,
+			// 1.3.0+ : accepte l'installeur de la source (voir receive_installer()).
+			'installer_upload' => 1,
 		);
+	}
+
+	/**
+	 * Reçoit l'installeur portable de la source : le site sera installé avec la version de
+	 * l'installeur de la source, même si l'extension de ce site est plus ancienne.
+	 *
+	 * Le code est authentifié par la signature HMAC de la requête, comme l'archive (qui
+	 * contient elle-même du code PHP), et n'est écrit qu'à la finalisation.
+	 *
+	 * @param string $kid  Clé.
+	 * @param string $code Code de l'installeur portable.
+	 * @return array
+	 * @throws Migration_Exception Code invalide ou écriture impossible.
+	 */
+	private static function receive_installer( $kid, $code ) {
+		if ( ! Installer_Builder::is_portable( $code ) ) {
+			throw new Migration_Exception( 'Installeur reçu invalide.', 'Mettez à jour Lwb Migration sur les deux sites, puis relancez la migration directe.' );
+		}
+		if ( false === @file_put_contents( self::incoming_dir( $kid ) . '/installer.src', $code ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			throw new Migration_Exception( 'Écriture impossible sur le site de destination (disque plein ?).', 'Libérez de l’espace disque sur le serveur de destination.' );
+		}
+		return array( 'ok' => true );
 	}
 
 	/**
@@ -422,7 +449,13 @@ class Direct_Transfer {
 				'prefix'   => $wpdb->base_prefix,
 			),
 		);
-		Installer_Builder::build( $root . '/' . $installer, $config );
+		// Installeur de la source s'il a été transmis (1.3.0+), sinon celui de ce site.
+		$portable_file = dirname( $part ) . '/installer.src';
+		$portable      = is_file( $portable_file ) ? (string) file_get_contents( $portable_file ) : null; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		if ( null !== $portable && ! Installer_Builder::is_portable( $portable ) ) {
+			$portable = null;
+		}
+		Installer_Builder::build( $root . '/' . $installer, $config, $portable );
 		Json_Store::delete_dir( dirname( $part ) );
 		// Clé à usage unique.
 		delete_option( self::OPTION );
@@ -621,11 +654,15 @@ class Direct_Transfer {
 		$info = self::request( $remote, 'hello' );
 		// Destination capable de rétablir les corps brouillés (1.2.0+).
 		$remote['mask'] = ! empty( $info['mask'] ) ? 1 : 0;
-		// L'installeur est construit par l'extension de la destination : une version plus
-		// ancienne installerait le site sans les correctifs de cette version (ex. 1.2.2 :
-		// caches Elementor non vidés, liens vers l'ancien domaine, CSS introuvables).
+
+		// Destination capable de recevoir l'installeur de la source (1.3.0+).
+		$remote['installer_upload'] = ! empty( $info['installer_upload'] ) ? 1 : 0;
+
+		// Avant 1.3.0, l'installeur est construit par l'extension de la destination : une
+		// version plus ancienne installerait le site sans les correctifs de cette version
+		// (ex. 1.2.2 : caches Elementor non vidés, liens vers l'ancien domaine, CSS introuvables).
 		$remote_version = isset( $info['plugin_version'] ) ? (string) $info['plugin_version'] : '';
-		if ( self::destination_outdated( $remote_version, LWB_MIGRATION_VERSION ) ) {
+		if ( empty( $remote['installer_upload'] ) && self::destination_outdated( $remote_version, LWB_MIGRATION_VERSION ) ) {
 			throw new Migration_Exception(
 				sprintf(
 					/* translators: 1: version de la destination, 2: version de ce site. */
@@ -730,7 +767,12 @@ class Direct_Transfer {
 	 * @return void
 	 */
 	public static function remote_finalize( Job $job ) {
-		$d                  = &$job->data;
+		$d = &$job->data;
+		if ( ! empty( $d['direct']['installer_upload'] ) ) {
+			// La destination installera le site avec l'installeur de cette version.
+			self::request( $d['direct'], 'installer', '0', '', Installer_Builder::render_portable() );
+			$job->logger()->info( 'Installeur de la source transmis à la destination.' );
+		}
 		$res                = self::request(
 			$d['direct'],
 			'finalize',

@@ -364,7 +364,7 @@
 		button.addEventListener( 'click', function () {
 			var pw = password.value;
 			if ( pw && pw.length < 8 ) {
-				notice( __( 'Le mot de passe doit contenir au moins 8 caractères.' ), __( 'Allongez-le, utilisez « Générer », ou laissez le champ vide.' ) );
+				notice( __( 'Le mot de passe doit contenir au moins 8 caractères.' ), __( 'Allongez-le, utilisez « Générer », ou laissez le champ vide pour qu’un mot de passe soit généré.' ) );
 				return;
 			}
 			notice( '' );
@@ -384,8 +384,10 @@
 							$( '[data-lwbm-dl="archive"]', result ).href = pkg.urls.archive;
 							$( '[data-lwbm-dl="installer"]', result ).href = pkg.urls.installer;
 						}
-						$( '.lwbm-password-reminder', result ).hidden = ! pw;
-						$( '[data-lwbm-password]', result ).textContent = pw;
+						// Mot de passe saisi ou généré par le serveur (champ laissé vide).
+						var finalPassword = res.data.password || pw;
+						$( '.lwbm-password-reminder', result ).hidden = ! finalPassword;
+						$( '[data-lwbm-password]', result ).textContent = finalPassword;
 						result.hidden = false;
 					} );
 				}, function () {

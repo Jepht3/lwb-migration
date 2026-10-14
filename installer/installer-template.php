@@ -34,6 +34,9 @@ class Installer {
 	const AUTH_TTL      = 43200;
 	const DONE_MARKER   = '.lwb-migration-done';
 	const MAX_ATTEMPTS  = 10;
+	const MAX_GLOBAL    = 100;
+	const DIRECT_TTL    = 86400;
+	const MANUAL_TTL    = 604800;
 	const PHASES        = array( 'extract', 'import', 'replace', 'finalize' );
 	const DROPINS       = array( 'advanced-cache.php', 'object-cache.php' );
 	const SALT_KEYS     = array( 'AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT' );
@@ -151,8 +154,14 @@ class Installer {
 			$this->fatal_page( 'Cet installeur doit être exécuté depuis la racine du site de destination.', 'Téléchargez installer.php et l’archive depuis l’administration, puis déposez-les sur le nouveau serveur.' );
 		}
 
+		// Un installeur doit toujours être protégé : mot de passe (export) ou jeton (migration directe).
+		if ( 'direct' !== $this->config['mode'] && '' === (string) $this->config['password_hash'] ) {
+			$this->fatal_page( 'Installeur non protégé.', 'Cet installer.php n’a pas de mot de passe : refaites l’export depuis Lwb Migration 1.3.0 ou plus récent (un mot de passe est désormais obligatoire).' );
+		}
+
 		$this->load_state();
 		$is_post = isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === $_SERVER['REQUEST_METHOD'];
+		$this->enforce_expiry();
 
 		// Installation terminée depuis plus d'une heure : on nettoie et on se retire.
 		if ( 'done' === $this->phase() && ! empty( $this->state['done_at'] ) && time() - $this->state['done_at'] > 3600 && ! $is_post ) {
@@ -244,12 +253,41 @@ class Installer {
 	// ------------------------------------------------------------------
 
 	/**
-	 * Une authentification est-elle exigée ?
+	 * Installeur jamais utilisé et trop ancien : il se retire.
 	 *
-	 * @return bool
+	 * Migration directe : 24 h après sa création (il contient les accès à la base de
+	 * données). Export : 7 jours après sa première ouverture sur le serveur.
+	 *
+	 * @return void
 	 */
-	private function needs_auth() {
-		return '' !== (string) $this->config['password_hash'] || 'direct' === $this->config['mode'];
+	private function enforce_expiry() {
+		if ( 'setup' !== $this->phase() ) {
+			return; // Installation commencée : elle doit pouvoir reprendre.
+		}
+		if ( 'direct' === $this->config['mode'] ) {
+			$since = (int) $this->config['created'];
+			$ttl   = self::DIRECT_TTL;
+		} else {
+			if ( empty( $this->state['first_seen'] ) ) {
+				$this->state['first_seen'] = time();
+				try {
+					$this->save_state();
+				} catch ( Migration_Exception $e ) {
+					return; // Dossier non accessible en écriture : signalé par les vérifications.
+				}
+			}
+			$since = (int) $this->state['first_seen'];
+			$ttl   = self::MANUAL_TTL;
+		}
+		if ( $since <= 0 || time() - $since <= $ttl ) {
+			return;
+		}
+		if ( 'direct' === $this->config['mode'] ) {
+			@unlink( $this->archive_path() ); // Archive déposée par la migration directe.
+		}
+		Json_Store::delete_dir( $this->data_dir );
+		@unlink( $this->root . '/' . $this->self );
+		$this->fatal_page( 'Installeur expiré.', 'Par sécurité, cet installeur inutilisé s’est supprimé. ' . ( 'direct' === $this->config['mode'] ? 'Relancez la migration directe depuis le site source.' : 'Générez un nouveau paquet depuis le site source.' ) );
 	}
 
 	/**
@@ -258,9 +296,6 @@ class Installer {
 	 * @return bool
 	 */
 	private function is_authenticated() {
-		if ( ! $this->needs_auth() ) {
-			return true;
-		}
 		$cookie = isset( $_COOKIE[ self::COOKIE ] ) ? (string) $_COOKIE[ self::COOKIE ] : '';
 		$parts  = explode( '.', $cookie );
 		if ( 2 !== count( $parts ) || ! ctype_digit( $parts[0] ) ) {
@@ -335,20 +370,37 @@ class Installer {
 		$data = Json_Store::read( $file );
 		$data = is_array( $data ) ? $data : array();
 		$now  = time();
-		$data = array_values(
-			array_filter(
-				$data,
-				function ( $t ) use ( $now ) {
-					return $now - (int) $t < 900;
-				}
-			)
-		);
+		$ip   = substr( hash_hmac( 'sha256', isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '', $this->config['secret'] ), 0, 16 );
+		$all  = 0;
+		foreach ( $data as $key => $times ) {
+			$times = array_values(
+				array_filter(
+					is_array( $times ) ? $times : array(),
+					function ( $t ) use ( $now ) {
+						return $now - (int) $t < 900;
+					}
+				)
+			);
+			if ( empty( $times ) ) {
+				unset( $data[ $key ] );
+				continue;
+			}
+			$data[ $key ] = $times;
+
+			$all += count( $times );
+		}
 		if ( $failed ) {
-			$data[] = $now;
+			$mine_list   = isset( $data[ $ip ] ) ? $data[ $ip ] : array();
+			$mine_list[] = $now;
+			$data[ $ip ] = $mine_list;
+			++$all;
 			Json_Store::ensure_protected_dir( $this->data_dir );
 			Json_Store::write( $file, $data );
 		}
-		return count( $data ) >= self::MAX_ATTEMPTS;
+		// Par adresse IP : un inconnu ne peut plus bloquer le propriétaire. Plafond global
+		// en plus, contre les essais répartis sur de nombreuses adresses.
+		$mine = isset( $data[ $ip ] ) ? count( $data[ $ip ] ) : 0;
+		return $mine >= self::MAX_ATTEMPTS || $all >= self::MAX_GLOBAL;
 	}
 
 	/**
@@ -440,6 +492,12 @@ class Installer {
 				case 'cleanup':
 					$this->json( $this->api_cleanup() );
 					break;
+				case 'plugins':
+					$this->json( $this->api_plugins() );
+					break;
+				case 'plugin_toggle':
+					$this->json( $this->api_plugin_toggle() );
+					break;
 			}
 		} catch ( Migration_Exception $e ) {
 			if ( 'setup' !== $this->phase() ) {
@@ -471,7 +529,7 @@ class Installer {
 		if ( ! password_verify( $password, (string) $this->config['password_hash'] ) ) {
 			$this->throttled( true );
 			usleep( 800000 );
-			$this->error( 'Mot de passe incorrect.', 'Utilisez le mot de passe défini lors de l’export (affiché dans la liste des paquets du site source).' );
+			$this->error( 'Mot de passe incorrect.', 'Utilisez le mot de passe affiché à la fin de l’export sur le site source. Perdu ? Refaites l’export.' );
 		}
 		$this->set_auth_cookie();
 		$this->json(
@@ -577,6 +635,19 @@ class Installer {
 	}
 
 	/**
+	 * Mot de passe de base de données déjà connu du serveur (jamais transmis au navigateur).
+	 *
+	 * @return string
+	 */
+	private function saved_db_password() {
+		if ( isset( $this->config['db']['password'] ) && '' !== (string) $this->config['db']['password'] ) {
+			return (string) $this->config['db']['password'];
+		}
+		$existing = $this->existing_db_config();
+		return isset( $existing['password'] ) ? (string) $existing['password'] : '';
+	}
+
+	/**
 	 * Valeur littérale d'un define() dans un fichier PHP.
 	 *
 	 * @param string $text     Code.
@@ -669,7 +740,8 @@ class Installer {
 			'host'     => isset( $db['host'] ) ? $db['host'] : ( isset( $existing['host'] ) ? $existing['host'] : 'localhost' ),
 			'name'     => isset( $db['name'] ) ? $db['name'] : ( isset( $existing['name'] ) ? $existing['name'] : '' ),
 			'user'     => isset( $db['user'] ) ? $db['user'] : ( isset( $existing['user'] ) ? $existing['user'] : '' ),
-			'password' => isset( $db['password'] ) ? $db['password'] : ( isset( $existing['password'] ) ? $existing['password'] : '' ),
+			// Jamais renvoyé au navigateur : seule sa présence est indiquée (voir saved_db_password()).
+			'password' => '',
 			'prefix'   => isset( $db['prefix'] ) ? $db['prefix'] : ( isset( $existing['prefix'] ) ? $existing['prefix'] : $this->config['source']['table_prefix'] ),
 			'site_url' => $url,
 			'home_url' => ! empty( $this->config['target']['home_url'] ) ? $this->config['target']['home_url'] : $this->derive_home( $url ),
@@ -678,11 +750,13 @@ class Installer {
 		if ( ! empty( $this->state['form'] ) ) {
 			$defaults = array_merge( $defaults, $this->state['form'] );
 		}
+		$defaults['password'] = '';
 		return array(
-			'ok'       => true,
-			'phase'    => $this->phase(),
-			'checks'   => $this->checks(),
-			'defaults' => $defaults,
+			'ok'             => true,
+			'phase'          => $this->phase(),
+			'checks'         => $this->checks(),
+			'defaults'       => $defaults,
+			'password_saved' => '' !== $this->saved_db_password(),
 			'existing' => ! empty( $existing ),
 			'progress' => $this->progress_payload(),
 		);
@@ -704,7 +778,12 @@ class Installer {
 			$f[ $k ] = isset( $_POST[ $k ] ) ? trim( (string) $_POST[ $k ] ) : '';
 		}
 		$f['password'] = isset( $_POST['password'] ) ? (string) $_POST['password'] : '';
-		$f['create']   = ! empty( $_POST['create'] );
+		if ( '' === $f['password'] ) {
+			// Champ laissé vide : mot de passe connu côté serveur (migration directe, wp-config existant).
+			$f['password'] = $this->saved_db_password();
+		}
+		$f['create']     = ! empty( $_POST['create'] );
+		$f['quarantine'] = ! empty( $_POST['quarantine'] );
 		if ( '' === $f['host'] ) {
 			$f['host'] = 'localhost';
 		}
@@ -941,6 +1020,10 @@ class Installer {
 			$entry = $st['entry'];
 			$name  = Archive_Reader::safe_name( $entry['name'] );
 			$dest  = null === $name ? null : $this->target_for( $name );
+			if ( null !== $name && preg_match( '#^files/wp-content/(plugins|themes)/([^/]+)#', $name, $m ) ) {
+				// Extensions et thèmes du site source (voir quarantine_leftovers()).
+				$st['keep'][ $m[1] ][ $m[2] ] = 1;
+			}
 			if ( null === $dest ) {
 				if ( null === $name ) {
 					$this->log()->warning( 'Entrée dangereuse ignorée : ' . $entry['name'] );
@@ -1146,12 +1229,16 @@ class Installer {
 		}
 		$this->purge_builder_caches( $db );
 		$this->fix_multisite( $db );
+		$this->add_site_notes( $db );
 		$db->close();
 
 		$this->write_wp_config();
 		$this->write_htaccess();
 		$this->restore_ini_files();
 		$this->disable_dropins();
+		if ( ! empty( $this->state['form']['quarantine'] ) ) {
+			$this->quarantine_leftovers();
+		}
 		// Dossier temporaire de WordPress (exclu de l'export) : indispensable aux mises à jour.
 		if ( ! is_dir( $this->root . '/wp-content/upgrade' ) ) {
 			@mkdir( $this->root . '/wp-content/upgrade', 0755, true );
@@ -1215,6 +1302,156 @@ class Installer {
 		if ( $purged > 0 || ! empty( $files ) ) {
 			$this->log()->info( sprintf( 'Caches Elementor vidés (%d entrée(s), %d fichier(s) CSS) : ils seront régénérés à la première visite.', $purged, is_array( $files ) ? count( $files ) : 0 ) );
 		}
+		// Autres constructeurs dont les fichiers générés sont recréés automatiquement.
+		$dirs = array(
+			'wp-content/et-cache'                => 'Divi',
+			'wp-content/uploads/bb-plugin/cache' => 'Beaver Builder',
+			'wp-content/uploads/bb-theme'        => 'Beaver Themer',
+		);
+		foreach ( $dirs as $rel => $builder ) {
+			if ( is_dir( $this->root . '/' . $rel ) ) {
+				Json_Store::delete_dir( $this->root . '/' . $rel );
+				$this->log()->info( sprintf( 'Cache %s vidé (%s).', $builder, $rel ) );
+			}
+		}
+	}
+
+	/**
+	 * Valeur brute d'une option du site installé.
+	 *
+	 * @param Db     $db   Connexion.
+	 * @param string $name Nom de l'option.
+	 * @return string|null
+	 */
+	private function option_value( Db $db, $name ) {
+		$table = $this->state['db']['prefix'] . 'options';
+		if ( empty( $this->state['import']['tables'] ) || ! in_array( $table, $this->state['import']['tables'], true ) ) {
+			return null;
+		}
+		$value = $db->get_var( 'SELECT option_value FROM ' . Db::ident( $table ) . ' WHERE option_name = ' . Db::literal( $name ) . ' LIMIT 1' );
+		return null === $value ? null : (string) $value;
+	}
+
+	/**
+	 * Extensions actives du site installé.
+	 *
+	 * @param Db $db Connexion.
+	 * @return string[]
+	 */
+	private function active_plugins( Db $db ) {
+		$raw  = $this->option_value( $db, 'active_plugins' );
+		$list = null === $raw ? false : @unserialize( $raw, array( 'allowed_classes' => false ) );
+		return is_array( $list ) ? array_values( array_filter( $list, 'is_string' ) ) : array();
+	}
+
+	/**
+	 * Enregistre la liste des extensions actives.
+	 *
+	 * @param Db       $db   Connexion.
+	 * @param string[] $list Extensions.
+	 * @return void
+	 */
+	private function save_active_plugins( Db $db, array $list ) {
+		$table = $this->state['db']['prefix'] . 'options';
+		$db->query( 'UPDATE ' . Db::ident( $table ) . ' SET option_value = ' . Db::literal( serialize( array_values( $list ) ) ) . " WHERE option_name = 'active_plugins'" );
+	}
+
+	/**
+	 * Points à vérifier après la migration, propres au site (affichés à la fin).
+	 *
+	 * @param Db $db Connexion.
+	 * @return void
+	 */
+	private function add_site_notes( Db $db ) {
+		$site = rtrim( $this->state['target']['home_url'], '/' );
+
+		$this->state['login_url'] = rtrim( $this->state['target']['site_url'], '/' ) . '/wp-login.php';
+		if ( '0' === $this->option_value( $db, 'blog_public' ) ) {
+			$this->state['notes'][] = 'Le site est masqué aux moteurs de recherche (réglage repris du site source). S’il s’agit du site public, décochez « Demander aux moteurs de recherche de ne pas indexer ce site » dans Réglages › Lecture.';
+		}
+		$plugins = $this->active_plugins( $db );
+		$has     = function ( $prefix ) use ( $plugins ) {
+			foreach ( $plugins as $plugin ) {
+				if ( 0 === strpos( $plugin, $prefix ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		if ( $has( 'wps-hide-login/' ) ) {
+			$slug = trim( (string) $this->option_value( $db, 'whl_page' ), '/' );
+			$slug = '' !== $slug ? $slug : 'login';
+
+			$this->state['login_url'] = $site . '/' . $slug . '/';
+			$this->state['notes'][]   = 'Connexion masquée par WPS Hide Login : connectez-vous à l’adresse ' . $site . '/' . $slug . '/ (l’adresse /wp-admin/ affiche une page introuvable, c’est normal).';
+		}
+		if ( $has( 'wordfence/' ) ) {
+			$this->state['notes'][] = 'Wordfence : ouvrez Wordfence › Pare-feu et relancez « Optimiser le pare-feu » (les chemins du serveur ont changé).';
+		}
+		if ( $has( 'novamira' ) ) {
+			$this->state['notes'][] = 'Novamira : les capacités IA se désactivent quand le domaine change. Réactivez-les depuis sa page Configuration.';
+		}
+		$licensed = array(
+			'elementor-pro/'              => 'Elementor Pro',
+			'advanced-custom-fields-pro/' => 'ACF Pro',
+			'wpforms/'                    => 'WPForms',
+			'gravityforms/'               => 'Gravity Forms',
+			'wp-rocket/'                  => 'WP Rocket',
+			'js_composer/'                => 'WPBakery',
+			'updraftplus/'                => 'UpdraftPlus',
+			'woocommerce-subscriptions/'  => 'WooCommerce Subscriptions',
+			'sitepress-multilingual-cms/' => 'WPML',
+		);
+		$names    = array();
+		foreach ( $licensed as $prefix => $label ) {
+			if ( $has( $prefix ) ) {
+				$names[] = $label;
+			}
+		}
+		if ( ! empty( $names ) ) {
+			$this->state['notes'][] = 'Licences liées au domaine : vérifiez qu’elles sont toujours actives pour ' . implode( ', ', $names ) . '.';
+		}
+	}
+
+	/**
+	 * Met de côté les extensions et thèmes présents sur la destination mais absents du
+	 * site source (restes de l'ancienne installation, jamais utilisés par le site migré).
+	 *
+	 * @return void
+	 */
+	private function quarantine_leftovers() {
+		$keep = isset( $this->state['extract']['keep'] ) ? $this->state['extract']['keep'] : array();
+		$base = $this->root . '/wp-content/lwb-mis-de-cote-' . date( 'Ymd-His' );
+		$out  = array();
+		foreach ( array( 'plugins', 'themes' ) as $type ) {
+			if ( empty( $keep[ $type ] ) ) {
+				continue; // Archive sans extensions (ou sans thèmes) : on ne touche à rien.
+			}
+			$dir   = $this->root . '/wp-content/' . $type;
+			$items = is_dir( $dir ) ? @scandir( $dir ) : false;
+			foreach ( is_array( $items ) ? $items : array() as $item ) {
+				if ( '.' === $item[0] || 'index.php' === $item || isset( $keep[ $type ][ $item ] ) || ( 'plugins' === $type && 'lwb-migration' === $item ) ) {
+					continue;
+				}
+				Json_Store::ensure_protected_dir( $base );
+				Json_Store::ensure_protected_dir( $base . '/' . $type );
+				if ( @rename( $dir . '/' . $item, $base . '/' . $type . '/' . $item ) ) {
+					$out[ $type ][] = $item;
+				}
+			}
+		}
+		if ( empty( $out ) ) {
+			return;
+		}
+		$list = array_merge( isset( $out['plugins'] ) ? $out['plugins'] : array(), isset( $out['themes'] ) ? $out['themes'] : array() );
+		$this->log()->info( 'Mis de côté (absents du site source) : ' . implode( ', ', $list ) . '.' );
+		$this->state['notes'][] = sprintf(
+			'%d extension(s) et %d thème(s) absents du site source (restes de l’ancienne installation) ont été mis de côté dans wp-content/%s/ : %s. Supprimez ce dossier après vérification.',
+			isset( $out['plugins'] ) ? count( $out['plugins'] ) : 0,
+			isset( $out['themes'] ) ? count( $out['themes'] ) : 0,
+			basename( $base ),
+			implode( ', ', array_slice( $list, 0, 12 ) ) . ( count( $list ) > 12 ? '…' : '' )
+		);
 	}
 
 	/**
@@ -1465,6 +1702,70 @@ class Installer {
 	}
 
 	/**
+	 * Extensions actives du site installé (contrôle après migration).
+	 *
+	 * @return array
+	 * @throws Migration_Exception Installation non terminée.
+	 */
+	private function api_plugins() {
+		if ( 'done' !== $this->phase() ) {
+			throw new Migration_Exception( 'L’installation n’est pas terminée.', '' );
+		}
+		$db   = $this->db();
+		$list = $this->active_plugins( $db );
+		$db->close();
+		return array(
+			'ok'       => true,
+			'plugins'  => array_values( array_diff( $list, array( 'lwb-migration/lwb-migration.php' ) ) ),
+			'disabled' => isset( $this->state['disabled_plugins'] ) ? $this->state['disabled_plugins'] : array(),
+		);
+	}
+
+	/**
+	 * Désactive ou réactive une extension (isolement d'une extension qui fait planter le site).
+	 *
+	 * @return array
+	 * @throws Migration_Exception Installation non terminée ou extension inconnue.
+	 */
+	private function api_plugin_toggle() {
+		if ( 'done' !== $this->phase() ) {
+			throw new Migration_Exception( 'L’installation n’est pas terminée.', '' );
+		}
+		$plugin = isset( $_POST['plugin'] ) ? (string) $_POST['plugin'] : '';
+		$active = ! empty( $_POST['active'] );
+		if ( ! preg_match( '#^[A-Za-z0-9._\-]+(/[A-Za-z0-9._\-]+)?\.php$#', $plugin ) ) {
+			throw new Migration_Exception( 'Extension invalide.', '' );
+		}
+		$db       = $this->db();
+		$list     = $this->active_plugins( $db );
+		$disabled = isset( $this->state['disabled_plugins'] ) ? $this->state['disabled_plugins'] : array();
+		if ( $active ) {
+			if ( ! in_array( $plugin, $disabled, true ) ) {
+				$db->close();
+				throw new Migration_Exception( 'Seules les extensions désactivées par l’installeur peuvent être réactivées ici.', '' );
+			}
+			$list[]   = $plugin;
+			$disabled = array_values( array_diff( $disabled, array( $plugin ) ) );
+		} else {
+			if ( ! in_array( $plugin, $list, true ) ) {
+				$db->close();
+				throw new Migration_Exception( 'Cette extension n’est pas active.', '' );
+			}
+			$list       = array_diff( $list, array( $plugin ) );
+			$disabled[] = $plugin;
+		}
+		$this->save_active_plugins( $db, array_unique( $list ) );
+		$db->close();
+		$this->state['disabled_plugins'] = array_values( array_unique( $disabled ) );
+		$this->save_state();
+		$this->log()->info( ( $active ? 'Extension réactivée : ' : 'Extension désactivée (contrôle du site) : ' ) . $plugin );
+		return array(
+			'ok'       => true,
+			'disabled' => $this->state['disabled_plugins'],
+		);
+	}
+
+	/**
 	 * Supprime installeur, archive, dossier de travail et marqueur.
 	 *
 	 * @return void
@@ -1529,12 +1830,23 @@ class Installer {
 			$out['log'] = $this->log()->tail( 6 );
 		}
 		if ( 'done' === $phase ) {
+			$old = array();
+			foreach ( array( $this->config['source']['site_url'], $this->config['source']['home_url'] ) as $url ) {
+				$host = strtolower( (string) parse_url( $url, PHP_URL_HOST ) );
+				if ( '' !== $host ) {
+					$old[] = $host;
+					$old[] = 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : 'www.' . $host;
+				}
+			}
+			$new_host      = strtolower( (string) parse_url( $s['target']['home_url'], PHP_URL_HOST ) );
 			$out['result'] = array(
-				'site_url' => $s['target']['home_url'],
-				'admin'    => rtrim( $s['target']['site_url'], '/' ) . '/wp-admin/',
-				'warnings' => (int) $s['warnings'],
-				'errors'   => (int) $s['errors'],
-				'notes'    => isset( $s['notes'] ) ? $s['notes'] : array(),
+				'site_url'  => $s['target']['home_url'],
+				'admin'     => rtrim( $s['target']['site_url'], '/' ) . '/wp-admin/',
+				'login'     => isset( $s['login_url'] ) ? $s['login_url'] : rtrim( $s['target']['site_url'], '/' ) . '/wp-login.php',
+				'old_hosts' => array_values( array_diff( array_unique( $old ), array( $new_host ) ) ),
+				'warnings'  => (int) $s['warnings'],
+				'errors'    => (int) $s['errors'],
+				'notes'     => isset( $s['notes'] ) ? $s['notes'] : array(),
 			);
 		}
 		return $out;
@@ -1719,6 +2031,7 @@ class Installer {
 								<div class="full"><label for="site_url">Adresse du site (WordPress)</label><input id="site_url" name="site_url" required></div>
 								<div class="full"><label for="home_url">Adresse de la page d’accueil</label><input id="home_url" name="home_url" required></div>
 								<div class="full"><label for="path">Dossier sur le serveur</label><input id="path" readonly></div>
+								<div class="full check"><label class="toggle"><input type="checkbox" name="quarantine" value="1" checked><span class="toggle-ui" aria-hidden="true"></span> Mettre de côté les extensions et thèmes du serveur absents du site source</label></div>
 							</div>
 						</details>
 						<div class="msg" id="db-result" hidden></div>
@@ -1748,6 +2061,7 @@ class Installer {
 					<h1>Migration réussie !</h1>
 					<p class="lead">Votre site est en ligne à l’adresse <a id="site-link" target="_blank" rel="noopener"></a></p>
 					<p class="muted">Connectez-vous avec les identifiants administrateur du site source.</p>
+					<div class="verify" id="verify" hidden><h2>Contrôle du site</h2><ul id="verify-list" class="verify-list"></ul></div>
 					<ul id="notes" class="notes"></ul>
 					<div class="actions center">
 						<button type="button" class="btn primary" id="cleanup">Supprimer les fichiers d’installation et ouvrir l’administration</button>
@@ -1811,6 +2125,7 @@ class Installer {
 		var f = $('db-form'), out = {};
 		['host', 'name', 'user', 'password', 'prefix', 'site_url', 'home_url'].forEach(function (k) { out[k] = f.elements[k].value; });
 		out.create = f.elements.create.checked ? '1' : '';
+		out.quarantine = f.elements.quarantine.checked ? '1' : '';
 		return out;
 	}
 	function renderChecks(checks) {
@@ -1854,6 +2169,108 @@ class Installer {
 			notes.appendChild(li);
 		}
 		show('done');
+		verifySite(r);
+	}
+	// Contrôle du site migré, depuis le navigateur (même adresse que l'installeur).
+	function verifySite(r) {
+		var box = $('verify'), list = $('verify-list'), site;
+		list.textContent = '';
+		box.hidden = false;
+		function item(text, level) {
+			var li = document.createElement('li'), s = document.createElement('span');
+			s.textContent = text; li.appendChild(s); list.appendChild(li);
+			if (level) { li.className = level; }
+			return { set: function (lvl, t) { li.className = lvl; if (t) { s.textContent = t; } } };
+		}
+		try { site = new URL(r.site_url, window.location.href); } catch (e) { box.hidden = true; return; }
+		if (site.origin !== window.location.origin) {
+			item('Contrôle automatique impossible : le site n’a pas la même adresse que cet installeur. Ouvrez-le pour le vérifier.', 'warn');
+			return;
+		}
+		function get(url) {
+			return fetch(url + (url.indexOf('?') > -1 ? '&' : '?') + 'lwb_check=' + Date.now(), { credentials: 'omit', cache: 'no-store' })
+				.then(function (res) { return res.text().then(function (t) { return { status: res.status, text: t }; }); });
+		}
+		function crashed(p) { return p.status >= 500 || /critical error|erreur critique|Fatal error/i.test(p.text); }
+		function oldLinks(html) {
+			var total = 0, found = [];
+			(r.old_hosts || []).forEach(function (h) {
+				var re = new RegExp('(^|[^a-z0-9.-])' + h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), n = (html.match(re) || []).length;
+				if (n) { total += n; found.push(h); }
+			});
+			return { total: total, hosts: found };
+		}
+		function assets(html) {
+			var doc = new DOMParser().parseFromString(html, 'text/html'), urls = [];
+			Array.prototype.forEach.call(doc.querySelectorAll('link[rel~="stylesheet"][href], script[src]'), function (el) {
+				try {
+					var u = new URL(el.getAttribute('href') || el.getAttribute('src'), site.href);
+					if (u.origin === window.location.origin && urls.indexOf(u.href) < 0) { urls.push(u.href); }
+				} catch (e) {}
+			});
+			urls = urls.slice(0, 40);
+			return Promise.all(urls.map(function (u) {
+				return fetch(u, { credentials: 'omit', cache: 'no-store' }).then(function (res) { return res.ok ? null : u; }, function () { return u; });
+			})).then(function (bad) { return { count: urls.length, missing: bad.filter(Boolean) }; });
+		}
+		function isolate(url, label) {
+			var it = item('Recherche de l’extension qui fait planter ' + label + '…');
+			function stillBroken() { return get(url).then(crashed, function () { return true; }); }
+			api('plugins').then(function (d) {
+				if (!d.ok) { it.set('error', d.message); return; }
+				var plugins = d.plugins.slice(), i = 0;
+				function next() {
+					if (i >= plugins.length) {
+						it.set('error', 'Le site plante encore quelle que soit l’extension désactivée : la cause est ailleurs (thème, version de PHP). Consultez le journal d’erreurs de l’hébergeur.');
+						return;
+					}
+					var p = plugins[i++];
+					it.set('', 'Test sans l’extension ' + p + ' (' + i + '/' + plugins.length + ')…');
+					api('plugin_toggle', { plugin: p, active: '' }).then(function (t) {
+						if (!t.ok) { return next(); }
+						return stillBroken().then(function (broken) {
+							if (!broken) {
+								it.set('warn', 'Extension désactivée parce qu’elle faisait planter ' + label + ' : ' + p + '. Mettez-la à jour (ou réinstallez-la) avant de la réactiver.');
+								return;
+							}
+							return api('plugin_toggle', { plugin: p, active: '1' }).then(next);
+						});
+					}).catch(function () { it.set('error', 'Recherche interrompue : connexion au serveur perdue. Rechargez la page.'); });
+				}
+				next();
+			}).catch(function (e) { it.set('error', e.message); });
+		}
+		var home = item('Page d’accueil…');
+		get(site.href).then(function (p) {
+			if (crashed(p)) {
+				home.set('error', 'Page d’accueil : erreur critique (HTTP ' + p.status + ').');
+				isolate(site.href, 'la page d’accueil');
+				return;
+			}
+			if (p.status >= 400) { home.set('error', 'Page d’accueil : HTTP ' + p.status + '.'); return; }
+			home.set('ok', 'Page d’accueil : en ligne (HTTP ' + p.status + ').');
+			var links = oldLinks(p.text);
+			if (links.total) {
+				item(links.total + ' lien(s) vers l’ancien domaine (' + links.hosts.join(', ') + ') sur la page d’accueil : videz les caches de votre constructeur de pages et de votre extension de cache, puis rechargez.', 'warn');
+			} else {
+				item('Aucun lien vers l’ancien domaine sur la page d’accueil.', 'ok');
+			}
+			var res = item('Feuilles de style et scripts…');
+			assets(p.text).then(function (a) {
+				if (a.missing.length) {
+					res.set('error', a.missing.length + ' fichier(s) CSS/JS introuvable(s) : ' + a.missing.map(function (u) { return u.replace(window.location.origin, ''); }).slice(0, 5).join(', ') + '. Régénérez les fichiers de votre constructeur de pages (Elementor › Outils › Effacer les fichiers et les données).');
+				} else {
+					res.set('ok', a.count + ' feuille(s) de style et script(s) chargé(s) sans erreur.');
+				}
+			});
+			var login = item('Page de connexion…');
+			get(r.login).then(function (q) {
+				if (crashed(q)) { login.set('error', 'Page de connexion : erreur critique (HTTP ' + q.status + ').'); isolate(r.login, 'la page de connexion'); return; }
+				if (q.status === 404) { login.set('warn', 'Page de connexion introuvable à l’adresse ' + r.login + ' : vérifiez l’extension qui masque la connexion.'); return; }
+				login.set('ok', 'Page de connexion : ' + r.login);
+			}, function () { login.set('warn', 'Page de connexion : contrôle impossible.'); });
+			item('Administration : après connexion, vérifiez qu’aucune « erreur critique » ne s’affiche (une extension peut ne planter que dans l’administration ; désactivez-la alors dans Extensions).', 'info');
+		}, function () { home.set('error', 'Page d’accueil injoignable depuis ce navigateur.'); });
 	}
 	function run() {
 		api('step').then(function (d) {
@@ -1915,6 +2332,7 @@ class Installer {
 	api('status').then(function (d) {
 		if (!d.ok) { error(d.message, d.solution); return; }
 		fillForm(d.defaults);
+		if (d.password_saved) { $('password').placeholder = 'Mot de passe enregistré : laissez vide pour le conserver'; }
 		if (d.existing && B.mode !== 'direct') { $('db-hint').textContent = 'Identifiants pré-remplis depuis le wp-config.php existant : vérifiez-les.'; }
 		if (d.phase === 'done') { done(d.progress); return; }
 		if (B.phases.indexOf(d.phase) > -1) { show('run'); updateProgress(d.progress); run(); return; }
@@ -2053,6 +2471,16 @@ input[readonly] { opacity: .7; }
 .notes li { padding: 12px 14px 12px 40px; border-radius: 12px; background: var(--p-soft); position: relative; font-size: 14px; }
 .notes li::before { content: "i"; position: absolute; left: 14px; top: 13px; width: 18px; height: 18px; border-radius: 50%; background: var(--p); color: #fff; font-size: 11px; font-weight: 800; text-align: center; line-height: 18px; }
 .notes li.warn { background: var(--warn-soft); } .notes li.warn::before { content: "!"; background: var(--warn); }
+.verify { max-width: 620px; margin: 26px auto 0; text-align: left; }
+.verify h2 { font-size: 16px; margin: 0 0 10px; }
+.verify-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.verify-list li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 12px; background: var(--bg); font-size: 14px; }
+.verify-list li::before { content: "…"; flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--line); color: var(--muted); font-size: 12px; font-weight: 800; text-align: center; line-height: 20px; }
+.verify-list li.ok::before { content: "✓"; background: var(--ok); color: #fff; }
+.verify-list li.warn { background: var(--warn-soft); } .verify-list li.warn::before { content: "!"; background: var(--warn); color: #fff; }
+.verify-list li.error { background: var(--err-soft); } .verify-list li.error::before { content: "×"; background: var(--err); color: #fff; }
+.verify-list li span { min-width: 0; overflow-wrap: anywhere; }
+.verify-list li.info::before { content: "i"; background: var(--p); color: #fff; }
 .solo { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: radial-gradient(1000px 520px at 10% -10%, rgba(42,31,208,.18), transparent), radial-gradient(800px 460px at 110% 110%, rgba(255,107,61,.16), transparent); }
 .solo-card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 36px 32px; text-align: center; box-shadow: 0 30px 60px -30px rgba(15,23,42,.35); }
 .solo-card form { text-align: left; margin-top: 22px; }

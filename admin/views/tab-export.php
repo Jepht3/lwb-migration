@@ -27,13 +27,13 @@ $lwbm_direct = false;
 		</ol>
 
 		<div class="lwbm-field">
-			<label for="lwbm-password"><?php esc_html_e( 'Mot de passe de l’installeur', 'lwb-migration' ); ?> <span class="lwbm-pill lwbm-pill-info"><?php esc_html_e( 'recommandé', 'lwb-migration' ); ?></span></label>
+			<label for="lwbm-password"><?php esc_html_e( 'Mot de passe de l’installeur', 'lwb-migration' ); ?> <span class="lwbm-pill lwbm-pill-info"><?php esc_html_e( 'obligatoire', 'lwb-migration' ); ?></span></label>
 			<div class="lwbm-input-group">
 				<span class="dashicons dashicons-lock" aria-hidden="true"></span>
-				<input type="text" id="lwbm-password" autocomplete="new-password" spellcheck="false" minlength="8" placeholder="<?php esc_attr_e( '8 caractères minimum', 'lwb-migration' ); ?>">
+				<input type="text" id="lwbm-password" autocomplete="new-password" spellcheck="false" minlength="8" placeholder="<?php esc_attr_e( 'Laissez vide pour en générer un automatiquement', 'lwb-migration' ); ?>">
 				<button type="button" class="lwbm-btn lwbm-btn-soft" id="lwbm-generate-password"><span class="dashicons dashicons-randomize" aria-hidden="true"></span> <?php esc_html_e( 'Générer', 'lwb-migration' ); ?></button>
 			</div>
-			<p class="lwbm-hint"><?php esc_html_e( 'Demandé à l’ouverture d’installer.php : personne d’autre ne pourra lancer l’installation. Notez-le bien.', 'lwb-migration' ); ?></p>
+			<p class="lwbm-hint"><?php esc_html_e( 'Demandé à l’ouverture d’installer.php : personne d’autre ne pourra lancer l’installation. Laissé vide, un mot de passe est généré et affiché à la fin de l’export : notez-le bien.', 'lwb-migration' ); ?></p>
 		</div>
 
 		<button type="button" class="lwbm-btn lwbm-btn-primary lwbm-btn-lg" id="lwbm-export">

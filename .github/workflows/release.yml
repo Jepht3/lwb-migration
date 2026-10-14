@@ -36,7 +36,7 @@ jobs:
       LWB_TEST_DB_USER: root
       LWB_TEST_DB_PASSWORD: root
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
@@ -52,11 +52,11 @@ jobs:
     needs: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: zip
+          extensions: zip, sodium
           coverage: none
       - name: Version à publier
         id: v
@@ -71,7 +71,10 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Construction du zip
         run: php bin/build.php
-      - name: Manifeste latest.json (vérifie aussi que le tag correspond à la version)
+      - name: Manifeste latest.json signé (vérifie aussi que le tag correspond à la version)
+        env:
+          # Graine Ed25519 (base64) : Settings › Secrets and variables › Actions.
+          LWB_SIGNING_SEED: ${{ secrets.LWB_SIGNING_SEED }}
         run: php bin/manifest.php "${{ steps.v.outputs.tag }}"
       - name: Création de la release
         env:

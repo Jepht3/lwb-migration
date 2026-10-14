@@ -32,6 +32,15 @@ class Updater {
 	const CHECKED  = 'lwb_migration_update_checked';
 
 	/**
+	 * Clé publique Ed25519 (base64) des publications officielles.
+	 *
+	 * Chaque latest.json est signé en CI avec la clé privée correspondante (secret GitHub
+	 * LWB_SIGNING_SEED) : un zip qui n'en provient pas est refusé, même si son SHA-256
+	 * correspond au manifeste.
+	 */
+	const PUBLIC_KEY = 'mgNQT16mtuyzqFV+ExYe8wxgY+d/jlvufVlkMudg4DY=';
+
+	/**
 	 * Crochets.
 	 *
 	 * @return void
@@ -75,6 +84,21 @@ class Updater {
 	}
 
 	/**
+	 * Clé publique de vérification des publications.
+	 *
+	 * Remplaçable par le filtre « lwb_migration_update_public_key » uniquement en mode test
+	 * (LWB_MIGRATION_ALLOW_HTTP, comme pour la migration directe en HTTP).
+	 *
+	 * @return string
+	 */
+	public static function public_key() {
+		if ( Direct_Transfer::allow_http() ) {
+			return (string) apply_filters( 'lwb_migration_update_public_key', self::PUBLIC_KEY );
+		}
+		return self::PUBLIC_KEY;
+	}
+
+	/**
 	 * Fichier principal de l'extension (relatif au dossier des extensions).
 	 *
 	 * @return string
@@ -110,10 +134,12 @@ class Updater {
 			return null;
 		}
 		$sha = isset( $data['sha256'] ) ? strtolower( (string) $data['sha256'] ) : '';
+		$sig = isset( $data['signature'] ) ? (string) $data['signature'] : '';
 		return array(
 			'version'      => $version,
 			'zip_url'      => $zip,
 			'sha256'       => preg_match( '/^[a-f0-9]{64}$/', $sha ) ? $sha : '',
+			'signature'    => preg_match( '/^[A-Za-z0-9+\/]{86}==$/', $sig ) ? $sig : '',
 			'requires'     => isset( $data['requires'] ) ? sanitize_text_field( (string) $data['requires'] ) : '5.8',
 			'requires_php' => isset( $data['requires_php'] ) ? sanitize_text_field( (string) $data['requires_php'] ) : '7.4',
 			'tested'       => isset( $data['tested'] ) ? sanitize_text_field( (string) $data['tested'] ) : '',
@@ -145,6 +171,9 @@ class Updater {
 		$data = null;
 		if ( ! is_wp_error( $res ) && 200 === (int) wp_remote_retrieve_response_code( $res ) ) {
 			$data = self::sanitize_manifest( json_decode( (string) wp_remote_retrieve_body( $res ), true ) );
+			if ( null !== $data && ! self::verify_signature( $data, self::public_key() ) ) {
+				$data = null; // Publication non signée par LEWEBMAX : jamais proposée.
+			}
 		}
 		set_site_transient( self::CACHE, $data ? $data : array(), $data ? 6 * HOUR_IN_SECONDS : 30 * MINUTE_IN_SECONDS );
 		update_site_option( self::CHECKED, time() );
@@ -265,7 +294,42 @@ class Updater {
 	}
 
 	/**
-	 * Vérifie l'empreinte SHA-256 du zip avant que WordPress ne l'installe.
+	 * Message signé pour une publication (version, adresse et empreinte du zip).
+	 *
+	 * @param string $version Version.
+	 * @param string $zip_url Adresse du zip.
+	 * @param string $sha256  Empreinte SHA-256 du zip.
+	 * @return string
+	 */
+	public static function signature_message( $version, $zip_url, $sha256 ) {
+		return implode( "\n", array( 'lwb-migration-release-v1', (string) $version, (string) $zip_url, strtolower( (string) $sha256 ) ) );
+	}
+
+	/**
+	 * La signature Ed25519 du manifeste est-elle valide ?
+	 *
+	 * @param array  $manifest   Manifeste assaini (version, zip_url, sha256, signature).
+	 * @param string $public_key Clé publique (base64).
+	 * @return bool
+	 */
+	public static function verify_signature( array $manifest, $public_key ) {
+		if ( empty( $manifest['sha256'] ) || empty( $manifest['signature'] ) || ! function_exists( 'sodium_crypto_sign_verify_detached' ) ) {
+			return false;
+		}
+		$sig = base64_decode( (string) $manifest['signature'], true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- signature binaire.
+		$key = base64_decode( (string) $public_key, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- clé binaire.
+		if ( false === $sig || false === $key || 64 !== strlen( $sig ) || 32 !== strlen( $key ) ) {
+			return false;
+		}
+		try {
+			return sodium_crypto_sign_verify_detached( $sig, self::signature_message( $manifest['version'], $manifest['zip_url'], $manifest['sha256'] ), $key );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Vérifie la signature et l'empreinte SHA-256 du zip avant que WordPress ne l'installe.
 	 *
 	 * @param bool|string|\WP_Error $reply   Réponse (false = téléchargement par défaut).
 	 * @param string                $package URL du paquet.
@@ -278,8 +342,15 @@ class Updater {
 			return $reply;
 		}
 		$m = self::latest();
-		if ( ! $m || '' === $m['sha256'] || $package !== $m['zip_url'] ) {
+		if ( ! $m || $package !== $m['zip_url'] ) {
 			return $reply;
+		}
+		if ( ! self::verify_signature( $m, self::public_key() ) ) {
+			self::flush();
+			return new \WP_Error(
+				'lwb_migration_signature',
+				__( 'Lwb Migration : cette mise à jour n’est pas signée par LEWEBMAX (signature absente ou invalide). Elle a été refusée par sécurité.', 'lwb-migration' )
+			);
 		}
 		if ( ! function_exists( 'download_url' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/file.php';

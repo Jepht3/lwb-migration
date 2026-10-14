@@ -55,6 +55,42 @@ class SearchReplaceTest extends TestCase {
 		$this->assertSame( 'http://site.test/blog/a et //site.test/blog/b', $sr->replace( 'http://site.test/a et //site.test/b' ) );
 	}
 
+	public function test_www_and_bare_domain_are_both_replaced() {
+		// Cas aea-serratrice.fr : site source en www, contenus parfois saisis sans www.
+		$sr = new Search_Replace( Search_Replace::build_pairs( array( 'https://www.aea.bazsolution.fr' => 'https://aea-serratrice.fr' ), array() ) );
+		$this->assertSame( 'https://aea-serratrice.fr/contact/', $sr->replace( 'https://www.aea.bazsolution.fr/contact/' ) );
+		$this->assertSame( 'https://aea-serratrice.fr/agence/', $sr->replace( 'https://aea.bazsolution.fr/agence/' ) );
+		$this->assertSame( 'https://aea-serratrice.fr/a', $sr->replace( 'http://aea.bazsolution.fr/a' ) );
+		$this->assertSame( '{"u":"https:\/\/aea-serratrice.fr\/x"}', $sr->replace( '{"u":"https:\/\/aea.bazsolution.fr\/x"}' ) );
+		$this->assertSame( 'src="//aea-serratrice.fr/x.js"', $sr->replace( 'src="//aea.bazsolution.fr/x.js"' ) );
+		$this->assertSame( 'https://www.bazsolution.fr/', $sr->replace( 'https://www.bazsolution.fr/' ), 'Le domaine parent n’est pas touché.' );
+	}
+
+	public function test_other_form_of_domain_is_kept_when_it_is_the_new_address() {
+		$sr = new Search_Replace( Search_Replace::build_pairs( array( 'https://example.com' => 'https://www.example.com' ), array() ) );
+		$this->assertSame( 'https://www.example.com/a', $sr->replace( 'https://example.com/a' ) );
+		$this->assertSame( 'https://www.example.com/b', $sr->replace( 'https://www.example.com/b' ) );
+	}
+
+	/**
+	 * @dataProvider www_cases
+	 */
+	public function test_toggle_www( $url, $expected ) {
+		$this->assertSame( $expected, Search_Replace::toggle_www( $url ) );
+	}
+
+	public function www_cases() {
+		return array(
+			'ajout'           => array( 'https://site.fr/blog', 'https://www.site.fr/blog' ),
+			'retrait'         => array( 'http://www.site.fr', 'http://site.fr' ),
+			'port conservé'   => array( 'https://site.fr:8443/x', 'https://www.site.fr:8443/x' ),
+			'localhost'       => array( 'http://localhost/wp', null ),
+			'adresse IP'      => array( 'http://192.168.1.10/wp', null ),
+			'www.localhost'   => array( 'http://www.localhost', null ),
+			'pas une URL'     => array( '/var/www/site', null ),
+		);
+	}
+
 	public function test_serialized_array_lengths_are_recomputed() {
 		$sr   = $this->engine();
 		$data = array(

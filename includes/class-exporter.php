@@ -46,6 +46,11 @@ class Exporter {
 		$outside   = 0 !== strpos( $content . '/', $abspath . '/' );
 		$rules     = Settings::file_rules( $settings, $storage );
 		$db_prefix = $settings['all_tables'] ? '' : $wpdb->base_prefix;
+		$password  = isset( $args['password'] ) ? (string) $args['password'] : '';
+		if ( empty( $args['direct'] ) && '' === $password ) {
+			// Un installer.php sans mot de passe serait utilisable par n'importe quel visiteur.
+			$password = self::generate_password();
+		}
 
 		$job = Job::create(
 			$jobs,
@@ -53,7 +58,7 @@ class Exporter {
 				'type'         => 'export',
 				'phase'        => 'scan',
 				'direct'       => isset( $args['direct'] ) ? $args['direct'] : null,
-				'password'     => isset( $args['password'] ) ? (string) $args['password'] : '',
+				'password'     => $password,
 				'format'       => $format,
 				'compress'     => (bool) $settings['compress'],
 				'archive_name' => 'archive-' . Runtime::random_hex( 32 ) . '.' . $format,
@@ -383,6 +388,8 @@ class Exporter {
 			'db'             => array(),
 		);
 		Installer_Builder::build( $pkg_dir . '/installer.dat', $config );
+		$protected     = '' !== $d['password'];
+		$d['password'] = ''; // Seule l'empreinte bcrypt est conservée (dans installer.php).
 
 		$meta = array(
 			'id'           => $job->id(),
@@ -393,7 +400,7 @@ class Exporter {
 			'files'        => $d['scanner']['files'],
 			'tables'       => count( $d['dumper']['tables'] ),
 			'site_url'     => $d['source']['site_url'],
-			'protected'    => '' !== $d['password'],
+			'protected'    => $protected,
 			'direct'       => ! empty( $d['direct'] ),
 			'warnings'     => $d['warnings'],
 		);
@@ -621,5 +628,20 @@ class Exporter {
 				return array( $dir . '/log.php', 'lwb-migration-log-' . gmdate( 'Ymd-His', $meta['created'] ) . '.txt' );
 		}
 		return null;
+	}
+
+	/**
+	 * Mot de passe d'installeur aléatoire (16 caractères sans ambiguïté de lecture).
+	 *
+	 * @return string
+	 */
+	public static function generate_password() {
+		$chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+		$max   = strlen( $chars ) - 1;
+		$out   = '';
+		for ( $i = 0; $i < 16; $i++ ) {
+			$out .= $chars[ random_int( 0, $max ) ];
+		}
+		return $out;
 	}
 }
