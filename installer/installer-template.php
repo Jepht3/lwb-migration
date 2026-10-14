@@ -757,8 +757,8 @@ class Installer {
 			'checks'         => $this->checks(),
 			'defaults'       => $defaults,
 			'password_saved' => '' !== $this->saved_db_password(),
-			'existing' => ! empty( $existing ),
-			'progress' => $this->progress_payload(),
+			'existing'       => ! empty( $existing ),
+			'progress'       => $this->progress_payload(),
 		);
 	}
 
@@ -1347,13 +1347,13 @@ class Installer {
 	/**
 	 * Enregistre la liste des extensions actives.
 	 *
-	 * @param Db       $db   Connexion.
-	 * @param string[] $list Extensions.
+	 * @param Db       $db      Connexion.
+	 * @param string[] $plugins Extensions.
 	 * @return void
 	 */
-	private function save_active_plugins( Db $db, array $list ) {
+	private function save_active_plugins( Db $db, array $plugins ) {
 		$table = $this->state['db']['prefix'] . 'options';
-		$db->query( 'UPDATE ' . Db::ident( $table ) . ' SET option_value = ' . Db::literal( serialize( array_values( $list ) ) ) . " WHERE option_name = 'active_plugins'" );
+		$db->query( 'UPDATE ' . Db::ident( $table ) . ' SET option_value = ' . Db::literal( serialize( array_values( $plugins ) ) ) . " WHERE option_name = 'active_plugins'" );
 	}
 
 	/**
