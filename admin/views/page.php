@@ -40,7 +40,7 @@ $lwbm_icons  = array(
 				<?php endif; ?>
 			<?php else : ?>
 				<span class="lwbm-update-state" data-lwbm-update-state><span class="dashicons dashicons-yes-alt" aria-hidden="true"></span>
-					<?php echo $lwbm_update['known'] ? esc_html__( 'À jour', 'lwb-migration' ) : esc_html__( 'Mises à jour automatiques', 'lwb-migration' ); ?>
+					<?php echo '' !== $lwbm_update['latest'] ? esc_html__( 'À jour', 'lwb-migration' ) : esc_html__( 'Mises à jour automatiques', 'lwb-migration' ); ?>
 				</span>
 				<button type="button" class="lwbm-update-btn" data-lwbm-check-update><?php esc_html_e( 'Vérifier', 'lwb-migration' ); ?></button>
 			<?php endif; ?>

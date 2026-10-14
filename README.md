@@ -1,5 +1,7 @@
 # Lwb Migration
 
+<img src="assets/icon.svg" alt="" width="72" align="right">
+
 Extension WordPress qui migre un site complet (fichiers + base de données) vers n'importe quel serveur, sans configuration, y compris sur les hébergements mutualisés les plus limités.
 
 - **Export** : un clic produit `archive-<aléatoire>.zip` + `installer.php` autonome.
@@ -7,6 +9,10 @@ Extension WordPress qui migre un site complet (fichiers + base de données) vers
 - **Migration directe** : transfert de serveur à serveur en HTTPS, par morceaux, avec une clé signée HMAC (24 h, usage unique).
 
 Compatibilité : PHP 7.4 → 8.4, WordPress 5.8+, MySQL 5.6+ / MariaDB 10.1+. Aucune dépendance à `exec()`, `mysqldump`, `zip` CLI, SSH ou Composer. Fonctionne avec `max_execution_time = 30`, `memory_limit = 128M`, `upload_max_filesize = 2M`.
+
+**Page officielle et téléchargement :** https://lewebmax.com/lwb-migration/ · [Dernière version (zip)](https://github.com/Jepht3/lwb-migration/releases/latest/download/lwb-migration.zip)
+
+![Exporter](docs/screenshots/exporter.webp)
 
 ## Guide d'utilisation
 
@@ -61,5 +67,12 @@ WP_CORE_DIR=/chemin/vers/wordpress php tests/e2e/e2e.php   # scénario complet d
 php bin/make-pot.php                                 # languages/lwb-migration.pot
 php bin/build.php                                    # dist/lwb-migration.zip
 ```
+
+## Publier une nouvelle version
+
+1. Mettez à jour `Version` et `LWB_MIGRATION_VERSION` dans `lwb-migration.php`, `Stable tag` et la section `= x.y.z =` du Changelog dans `readme.txt`.
+2. Poussez, puis **au choix** : `git tag v1.2.0 && git push origin v1.2.0`, ou GitHub › Actions › **Release** › *Run workflow*.
+3. La GitHub Action teste (PHP 7.4 et 8.4), construit `lwb-migration.zip` et `latest.json`, puis publie la release.
+4. Aussitôt : le bouton de téléchargement de https://lewebmax.com/lwb-migration/ pointe vers la nouvelle version, et chaque site équipé la voit dans *Extensions › Mises à jour* (vérification toutes les 12 h, ou bouton « Vérifier »). L'empreinte SHA-256 du zip est contrôlée avant installation.
 
 Le scénario de bout en bout installe un WordPress source dans un sous-dossier (préfixe `srcwp_`, contenus sérialisés, JSON, binaires, fichier de 30 Mo). Il l'exporte puis l'installe sur un autre domaine, dans un autre dossier, une autre base et avec un autre préfixe, en étapes de 0,25 s et avec des coupures réseau simulées. Il vérifie ensuite qu'aucune ancienne URL ni aucun ancien chemin ne subsiste, que le site répond et que la connexion admin fonctionne. Il couvre aussi la migration directe et le format LWB.

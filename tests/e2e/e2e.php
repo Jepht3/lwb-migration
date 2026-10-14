@@ -399,7 +399,7 @@ function install_wp( $abspath, $url, $dbname, $prefix, $title, $extra_defines = 
 		. "if ( ! defined( 'ABSPATH' ) ) {\n\tdefine( 'ABSPATH', __DIR__ . '/' );\n}\nrequire_once ABSPATH . 'wp-settings.php';\n";
 	file_put_contents( "$abspath/wp-config.php", $config );
 	$plugin = "$abspath/wp-content/plugins/lwb-migration";
-	foreach ( array( 'lwb-migration.php', 'uninstall.php', 'readme.txt', 'includes', 'admin', 'installer', 'languages' ) as $item ) {
+	foreach ( array( 'lwb-migration.php', 'uninstall.php', 'readme.txt', 'includes', 'admin', 'installer', 'languages', 'assets' ) as $item ) {
 		if ( file_exists( E2E_ROOT . '/' . $item ) ) {
 			rcopy( E2E_ROOT . '/' . $item, "$plugin/$item" );
 		}

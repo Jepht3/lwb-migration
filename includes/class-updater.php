@@ -381,7 +381,6 @@ class Updater {
 			return $links;
 		}
 		$links[] = '<a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=lwb_migration_check_updates' ), 'lwb_migration_check_updates' ) ) . '">' . esc_html__( 'Vérifier les mises à jour', 'lwb-migration' ) . '</a>';
-		$links[] = '<a href="' . esc_url( self::HOMEPAGE ) . '" target="_blank" rel="noopener">' . esc_html__( 'Page de l’extension', 'lwb-migration' ) . '</a>';
 		return $links;
 	}
 
