@@ -293,6 +293,19 @@ function drive_job( Client $c, $base, $nonce, $job, $chaos = true ) {
 /**
  * Pilote installer.php comme son JavaScript.
  */
+/**
+ * Audit de mise en page dans un vrai navigateur (320 à 1280 px, tous les états).
+ */
+function layout_audit( array $args, $label ) {
+	exec( 'node ' . escapeshellarg( __DIR__ . '/layout-audit.js' ) . ' ' . implode( ' ', array_map( 'escapeshellarg', $args ) ) . ' 2>&1', $out, $rc );
+	if ( 2 === $rc || 127 === $rc ) {
+		echo "    (navigateur indisponible : audit de mise en page ignoré)\n";
+		return;
+	}
+	$total = preg_match( '/^TOTAL (\d+)$/', (string) end( $out ), $m ) ? (int) $m[1] : -1;
+	ok( 0 === $rc && 0 === $total, "$label : aucun chevauchement ni débordement de 320 à 1280 px" ) || print( '    ' . implode( "\n    ", array_slice( $out, 0, 15 ) ) . "\n" );
+}
+
 function drive_installer( Client $c, $url, array $form, $expect_auth = null ) {
 	$page = $c->request( $url );
 	if ( null !== $expect_auth ) {
@@ -583,6 +596,8 @@ step( 'Scénario 1 – Installation sur http://localhost:8102 (autre dossier, ba
 mysql_root()->query( 'DROP DATABASE IF EXISTS lwb_e2e_dst' );
 start_server( 8102, $dst_root, 4, 'dst' );
 $dst_url = 'http://localhost:8102';
+layout_audit( array( 'admin', $src_url, 'admin', E2E_PASS ), 'administration (Exporter, Migration directe, Paramètres)' );
+layout_audit( array( 'installer', "$dst_url/installer.php", E2E_PKG_PASSWORD ), 'installeur (connexion et étapes, clair et sombre)' );
 $inst    = new Client( 'dst' );
 list( $api, $final ) = drive_installer(
 	$inst,

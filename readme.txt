@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,11 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.2.2 =
+* Affichage sur mobile et tablette entièrement revu : plus aucun chevauchement ni débordement de 320 à 1280 px, dans l'administration comme dans l'installeur (pourcentage de progression, titres sur deux lignes, onglets, longs noms de fichiers et adresses, rappel du mot de passe, liste des vérifications de l'installeur)
+* La barre « Enregistrer les réglages » ne recouvre plus les réglages
+* Contrôle automatique de la mise en page dans un vrai navigateur, à chaque test
 
 = 1.2.1 =
 * Correction : après une migration directe, le lien « Ouvrir l'installeur sur la destination » affichait « Accès réservé » (cookie de session ignoré par le navigateur quand le lien vient d'un autre site)
