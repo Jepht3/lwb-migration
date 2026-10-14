@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,12 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.4.0 =
+* Sauvegarde automatique de la destination avant l'installation : les tables remplacées sont renommées (préfixe lwbbk_), les fichiers écrasés et wp-config.php, .htaccess, .user.ini, php.ini sont mis de côté. Le bouton « Annuler : restaurer l'ancien site » remet tout en place, même après une installation interrompue. La sauvegarde est supprimée avec les fichiers d'installation
+* Archive chiffrée (AES-256-GCM) avec le mot de passe de l'installeur : fichiers, wp-config.php et base de données sont illisibles sans lui, sur le serveur comme pendant le transfert FTP. Toute modification ou troncature est détectée. Réglage « Chiffrer l'archive », activé par défaut
+* Migration directe : le lien d'installation ne fonctionne qu'une fois (toléré 10 minutes pour un rechargement, jamais après le début de l'installation)
+* Tests de bout en bout sur un vrai WordPress (PHP 7.4 et 8.4) à chaque modification
 
 = 1.3.0 =
 * Sécurité : le mot de passe de l'installeur est désormais obligatoire. Laissé vide, il est généré automatiquement et affiché à la fin de l'export. Un installer.php sans mot de passe refuse de s'exécuter

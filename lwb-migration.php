@@ -3,7 +3,7 @@
  * Plugin Name:       Lwb Migration
  * Plugin URI:        https://lewebmax.com/lwb-migration/
  * Description:       Migrez un site WordPress complet (fichiers + base de données) vers n’importe quel serveur, sans configuration : export en un clic, installer.php autonome ou migration directe de serveur à serveur.
- * Version:           1.3.0
+ * Version:           1.4.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            LEWEBMAX
@@ -19,7 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LWB_MIGRATION_VERSION', '1.3.0' );
+define( 'LWB_MIGRATION_VERSION', '1.4.0' );
 define( 'LWB_MIGRATION_FILE', __FILE__ );
 define( 'LWB_MIGRATION_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LWB_MIGRATION_URL', plugin_dir_url( __FILE__ ) );

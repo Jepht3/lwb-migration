@@ -391,8 +391,8 @@ class Exporter {
 			'salt'       => hex2bin( $c['salt'] ),
 			'iterations' => (int) $c['iterations'],
 		);
-		$key  = Archive_Crypto::derive_key( $d['password'], $state['salt'], $state['iterations'] );
-		$done = Archive_Crypto::encrypt_step( $plain, $enc, $key, $state, $rt );
+		$key   = Archive_Crypto::derive_key( $d['password'], $state['salt'], $state['iterations'] );
+		$done  = Archive_Crypto::encrypt_step( $plain, $enc, $key, $state, $rt );
 
 		$c['in'] = $state['in'];
 		if ( $done ) {

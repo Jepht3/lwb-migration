@@ -825,13 +825,14 @@ list( $api3, $final3 ) = drive_installer(
 	$c3,
 	"$d3_url/installer.php",
 	array(
-		'host'     => $db_host,
-		'name'     => 'lwb_e2e_d3',
-		'user'     => $db_user,
-		'password' => $db_pass,
-		'prefix'   => 'srcwp_',
-		'site_url' => $d3_url,
-		'home_url' => $d3_url,
+		'host'       => $db_host,
+		'name'       => 'lwb_e2e_d3',
+		'user'       => $db_user,
+		'password'   => $db_pass,
+		'prefix'     => 'srcwp_',
+		'site_url'   => $d3_url,
+		'home_url'   => $d3_url,
+		'quarantine' => '1', // Option cochée par défaut dans l'interface.
 	),
 	$pkg3_pw
 );
