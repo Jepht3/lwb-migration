@@ -45,6 +45,7 @@ jobs:
       - run: composer install --no-interaction --no-progress
       - run: vendor/bin/phpcs -q
       - run: vendor/bin/phpunit
+        timeout-minutes: 5
 
   release:
     name: Publication
