@@ -1,14 +1,16 @@
 name: Release
 
 # Publier une version : mettre à jour « Version » (lwb-migration.php), LWB_MIGRATION_VERSION,
-# « Stable tag » et le Changelog de readme.txt, puis :
-#   git tag v1.2.0 && git push origin v1.2.0
-# La release GitHub (zip + latest.json) est créée automatiquement. La page
-# https://lewebmax.com/lwb-migration/ et tous les sites équipés la voient aussitôt.
+# « Stable tag » et le Changelog de readme.txt, puis AU CHOIX :
+#   - git tag v1.2.0 && git push origin v1.2.0
+#   - ou GitHub › Actions › Release › « Run workflow » (le tag est créé automatiquement).
+# La release GitHub (zip + latest.json) est publiée. La page https://lewebmax.com/lwb-migration/
+# et tous les sites équipés de l'extension la voient aussitôt.
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -55,15 +57,28 @@ jobs:
           php-version: '8.3'
           extensions: zip
           coverage: none
-      - name: Construction du zip
-        run: php bin/build.php
-      - name: Manifeste latest.json (vérifie aussi que le tag correspond à la version)
-        run: php bin/manifest.php "${GITHUB_REF_NAME}"
-      - name: Création de la release
+      - name: Version à publier
+        id: v
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/lwb-migration.zip dist/latest.json \
-            --title "Lwb Migration ${GITHUB_REF_NAME#v}" \
+          VERSION=$(sed -n 's/^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*//p' lwb-migration.php | tr -d '[:space:]')
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then TAG="${GITHUB_REF_NAME}"; else TAG="v${VERSION}"; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::La release $TAG existe déjà : augmentez la version de l'extension."; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Construction du zip
+        run: php bin/build.php
+      - name: Manifeste latest.json (vérifie aussi que le tag correspond à la version)
+        run: php bin/manifest.php "${{ steps.v.outputs.tag }}"
+      - name: Création de la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/lwb-migration.zip dist/latest.json \
+            --target "$GITHUB_SHA" \
+            --title "Lwb Migration ${TAG#v}" \
             --notes-file dist/notes.md \
             --latest
