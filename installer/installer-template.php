@@ -11,6 +11,7 @@
 
 namespace LwbMigration\Installer;
 
+use LwbMigration\Archive_Crypto;
 use LwbMigration\Archive_Reader;
 use LwbMigration\Db;
 use LwbMigration\Json_Store;
@@ -40,7 +41,7 @@ class Installer {
 	const TOKEN_GRACE   = 600;
 	const BACKUP_PREFIX = 'lwbbk_';
 	const BACKUP_CONFIG = array( 'wp-config.php', '.htaccess', '.user.ini', 'php.ini' );
-	const PHASES        = array( 'extract', 'import', 'replace', 'finalize' );
+	const PHASES        = array( 'decrypt', 'extract', 'import', 'replace', 'finalize' );
 	const DROPINS       = array( 'advanced-cache.php', 'object-cache.php' );
 	const SALT_KEYS     = array( 'AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT' );
 	const CONTENT_DEFS  = array( 'WP_CONTENT_DIR', 'WP_CONTENT_URL', 'WP_PLUGIN_DIR', 'WP_PLUGIN_URL', 'PLUGINDIR', 'WPMU_PLUGIN_DIR', 'WPMU_PLUGIN_URL' );
@@ -552,6 +553,11 @@ class Installer {
 			usleep( 800000 );
 			$this->error( 'Mot de passe incorrect.', 'Utilisez le mot de passe affiché à la fin de l’export sur le site source. Perdu ? Refaites l’export.' );
 		}
+		if ( $this->is_encrypted() && Archive_Crypto::available() ) {
+			// Clé de déchiffrement de l'archive, gardée dans le dossier de travail protégé.
+			$this->state['archive_key'] = bin2hex( Archive_Crypto::derive_key( $password, (string) hex2bin( (string) $this->config['encryption']['salt'] ), (int) $this->config['encryption']['iterations'] ) );
+			$this->save_state();
+		}
 		$this->set_auth_cookie();
 		$this->json(
 			array(
@@ -693,6 +699,28 @@ class Installer {
 	}
 
 	/**
+	 * Archive chiffrée avec le mot de passe de l'installeur ?
+	 *
+	 * @return bool
+	 */
+	private function is_encrypted() {
+		return ! empty( $this->config['encryption']['salt'] );
+	}
+
+	/**
+	 * Archive lisible : la copie déchiffrée (dossier de travail) ou l'archive elle-même.
+	 *
+	 * @return string
+	 */
+	private function reader_path() {
+		if ( ! $this->is_encrypted() ) {
+			return $this->archive_path();
+		}
+		$plain = basename( (string) $this->config['encryption']['plain'] );
+		return $this->data_dir . '/' . ( '' !== $plain ? $plain : 'archive.zip' );
+	}
+
+	/**
 	 * Vérifications de l'environnement.
 	 *
 	 * @return array[] label, value, level (ok|warn|error), help.
@@ -719,6 +747,13 @@ class Installer {
 			$add( 'Archive', 'déjà installée', 'ok' );
 		} elseif ( ! $present ) {
 			$add( 'Archive', 'introuvable', 'error', 'Déposez l’archive « ' . basename( $archive ) . ' » dans le même dossier que ' . $this->self . '.' );
+		} elseif ( $this->is_encrypted() ) {
+			$size  = (int) @filesize( $archive );
+			$head  = Archive_Crypto::read_header( $archive );
+			$level = null !== $head && ( (int) $this->config['archive_size'] <= 0 || (int) $this->config['archive_size'] === $size ) ? 'ok' : 'error';
+			$add( 'Archive', Runtime::format_bytes( $size ) . ', chiffrée (AES-256)', $level, null === $head ? 'Ce n’est pas l’archive chiffrée attendue : déposez le fichier « ' . basename( $archive ) . ' » produit par le même export.' : 'Taille inattendue : l’archive est incomplète. Retransférez-la en mode binaire.' );
+			$crypto = Archive_Crypto::available();
+			$add( 'Déchiffrement (OpenSSL)', $crypto ? 'disponible' : 'indisponible', $crypto ? 'ok' : 'error', 'Activez l’extension PHP openssl, ou refaites l’export sans chiffrement (Réglages de Lwb Migration).' );
 		} else {
 			$size = (int) @filesize( $archive );
 			try {
@@ -734,7 +769,7 @@ class Installer {
 		$add( 'Dossier de destination', $writable ? 'accessible en écriture' : 'non accessible en écriture', $writable ? 'ok' : 'error', 'Donnez les droits d’écriture (755) au dossier ' . $this->root . '.' );
 		$free = function_exists( 'disk_free_space' ) ? @disk_free_space( $this->root ) : false;
 		if ( false !== $free && $present ) {
-			$need = (int) @filesize( $archive ) * 2;
+			$need = (int) @filesize( $archive ) * ( $this->is_encrypted() ? 3 : 2 ); // Copie déchiffrée en plus.
 			$add( 'Espace disque libre', Runtime::format_bytes( $free ), $free >= $need ? 'ok' : 'warn', 'Prévoyez au moins ' . Runtime::format_bytes( $need ) . ' libres (archive + fichiers extraits).' );
 		}
 		$mem = Runtime::memory_limit_bytes();
@@ -887,39 +922,46 @@ class Installer {
 				throw new Migration_Exception( $check['label'] . ' : ' . $check['value'], $check['help'] );
 			}
 		}
+		$key = isset( $this->state['archive_key'] ) ? (string) $this->state['archive_key'] : '';
+		if ( $this->is_encrypted() && '' === $key ) {
+			setcookie( self::COOKIE, '', time() - 3600, $this->script_dir() . '/' );
+			throw new Migration_Exception( 'Session à renouveler pour déchiffrer l’archive.', 'Rechargez la page et saisissez à nouveau le mot de passe de l’installeur.' );
+		}
 		$f  = $this->read_form();
 		$db = $this->connect( $f );
 		$db->close();
 		$src         = $this->config['source'];
 		$this->state = array(
-			'phase'    => 'extract',
-			'form'     => array_diff_key( $f, array( 'password' => 1 ) ),
-			'db'       => array(
+			'phase'       => $this->is_encrypted() ? 'decrypt' : 'extract',
+			'archive_key' => $key,
+			'decrypt'     => array( 'index' => 0 ),
+			'form'        => array_diff_key( $f, array( 'password' => 1 ) ),
+			'db'          => array(
 				'host'     => $f['host'],
 				'name'     => $f['name'],
 				'user'     => $f['user'],
 				'password' => $f['password'],
 				'prefix'   => $f['prefix'],
 			),
-			'target'   => array(
+			'target'      => array(
 				'site_url' => $f['site_url'],
 				'home_url' => $f['home_url'],
 				'abspath'  => $this->root,
 			),
-			'extract'  => array(
+			'extract'     => array(
 				'cursor'  => 0,
 				'entry'   => null,
 				'prog'    => array(),
 				'done'    => 0,
 				'skipped' => 0,
 			),
-			'import'   => array(),
-			'replace'  => array(),
-			'warnings' => 0,
-			'errors'   => 0,
-			'started'  => time(),
-			'notes'    => array(),
-			'backup'   => array(
+			'import'      => array(),
+			'replace'     => array(),
+			'warnings'    => 0,
+			'errors'      => 0,
+			'started'     => time(),
+			'notes'       => array(),
+			'backup'      => array(
 				'config' => array(),
 				'files'  => 0,
 				'tables' => 0,
@@ -961,6 +1003,9 @@ class Installer {
 			do {
 				$phase = $this->phase();
 				switch ( $phase ) {
+					case 'decrypt':
+						$this->step_decrypt( $rt );
+						break;
 					case 'extract':
 						$this->step_extract( $rt );
 						break;
@@ -1022,6 +1067,32 @@ class Installer {
 	}
 
 	/**
+	 * Déchiffrement de l'archive dans le dossier de travail (par étapes, avec reprise).
+	 *
+	 * @param Runtime $rt Budget.
+	 * @return void
+	 * @throws Migration_Exception Clé absente, archive modifiée ou tronquée.
+	 */
+	private function step_decrypt( Runtime $rt ) {
+		$key = isset( $this->state['archive_key'] ) ? (string) hex2bin( (string) $this->state['archive_key'] ) : '';
+		if ( 32 !== strlen( $key ) ) {
+			throw new Migration_Exception( 'Clé de déchiffrement absente.', 'Rechargez la page et saisissez à nouveau le mot de passe de l’installeur.' );
+		}
+		Json_Store::ensure_protected_dir( $this->data_dir );
+		if ( empty( $this->state['decrypt']['index'] ) ) {
+			$this->log()->info( 'Déchiffrement de l’archive (AES-256-GCM).' );
+		}
+		$st   = isset( $this->state['decrypt'] ) ? $this->state['decrypt'] : array( 'index' => 0 );
+		$done = Archive_Crypto::decrypt_step( $this->archive_path(), $this->reader_path(), $key, $st, $rt );
+
+		$this->state['decrypt'] = $st;
+		if ( $done ) {
+			$this->log()->info( 'Archive déchiffrée et authentifiée.' );
+			$this->state['phase'] = 'extract';
+		}
+	}
+
+	/**
 	 * Extraction des fichiers.
 	 *
 	 * @param Runtime $rt Budget.
@@ -1029,7 +1100,7 @@ class Installer {
 	 */
 	private function step_extract( Runtime $rt ) {
 		$st               = &$this->state['extract'];
-		$reader           = new Archive_Reader( $this->archive_path() );
+		$reader           = new Archive_Reader( $this->reader_path() );
 		$st['index_size'] = $reader->index_size();
 		$st['total']      = $reader->count();
 		do {
@@ -1284,6 +1355,10 @@ class Installer {
 
 		// Nettoyage immédiat des fichiers lourds ou sensibles.
 		@unlink( $this->archive_path() );
+		if ( $this->is_encrypted() ) {
+			@unlink( $this->reader_path() ); // Copie déchiffrée.
+			unset( $this->state['archive_key'] );
+		}
 		foreach ( array( 'database.sql', 'wp-config-source.php', 'htaccess-source.txt', 'user-ini-source.txt', 'php-ini-source.txt', 'package.json' ) as $tmp ) {
 			@unlink( $this->data_dir . '/' . $tmp );
 		}
@@ -1479,6 +1554,7 @@ class Installer {
 		$list = array_merge( isset( $out['plugins'] ) ? $out['plugins'] : array(), isset( $out['themes'] ) ? $out['themes'] : array() );
 		$this->log()->info( 'Mis de côté (absents du site source) : ' . implode( ', ', $list ) . '.' );
 		$this->state['quarantine_dir'] = $base;
+
 		$this->state['notes'][] = sprintf(
 			'%d extension(s) et %d thème(s) absents du site source (restes de l’ancienne installation) ont été mis de côté dans wp-content/%s/ : %s. Supprimez ce dossier après vérification.',
 			isset( $out['plugins'] ) ? count( $out['plugins'] ) : 0,
@@ -1886,12 +1962,12 @@ class Installer {
 	/**
 	 * Renomme les tables de la destination qui vont être remplacées par l'import.
 	 *
-	 * @param Db     $db  Connexion.
-	 * @param string $old Préfixe du site source.
-	 * @param string $new Préfixe de la destination.
+	 * @param Db     $db         Connexion.
+	 * @param string $old_prefix Préfixe du site source.
+	 * @param string $new_prefix Préfixe de la destination.
 	 * @return void
 	 */
-	private function backup_tables( Db $db, $old, $new ) {
+	private function backup_tables( Db $db, $old_prefix, $new_prefix ) {
 		$pkg      = json_decode( (string) @file_get_contents( $this->data_dir . '/package.json' ), true );
 		$tables   = is_array( $pkg ) && isset( $pkg['tables'] ) && is_array( $pkg['tables'] ) ? $pkg['tables'] : array();
 		$existing = array_flip( $db->list_tables() );
@@ -1899,7 +1975,7 @@ class Installer {
 		$map      = Json_Store::read( $map_file );
 		$map      = is_array( $map ) ? $map : array();
 		foreach ( $tables as $table ) {
-			$target = self::target_table( (string) $table, $old, $new );
+			$target = self::target_table( (string) $table, $old_prefix, $new_prefix );
 			if ( isset( $map[ $target ] ) || ! isset( $existing[ $target ] ) ) {
 				continue;
 			}
@@ -1925,13 +2001,13 @@ class Installer {
 	/**
 	 * Nom d'une table du site source sur la destination (changement de préfixe).
 	 *
-	 * @param string $table Table du site source.
-	 * @param string $old   Préfixe du site source.
-	 * @param string $new   Préfixe de la destination.
+	 * @param string $table      Table du site source.
+	 * @param string $old_prefix Préfixe du site source.
+	 * @param string $new_prefix Préfixe de la destination.
 	 * @return string
 	 */
-	private static function target_table( $table, $old, $new ) {
-		return ( '' !== $old && 0 === strpos( $table, $old ) ) ? $new . substr( $table, strlen( $old ) ) : $table;
+	private static function target_table( $table, $old_prefix, $new_prefix ) {
+		return ( '' !== $old_prefix && 0 === strpos( $table, $old_prefix ) ) ? $new_prefix . substr( $table, strlen( $old_prefix ) ) : $table;
 	}
 
 	/**
@@ -2016,10 +2092,10 @@ class Installer {
 		$existing = array_flip( $db->list_tables() );
 		$pkg      = json_decode( (string) @file_get_contents( $this->data_dir . '/package.json' ), true );
 		$created  = isset( $this->state['import']['tables'] ) && is_array( $this->state['import']['tables'] ) ? $this->state['import']['tables'] : array();
-		$old      = isset( $this->state['import']['old_prefix'] ) ? (string) $this->state['import']['old_prefix'] : (string) $this->config['source']['table_prefix'];
-		$new      = (string) $this->state['db']['prefix'];
+		$old_pre  = isset( $this->state['import']['old_prefix'] ) ? (string) $this->state['import']['old_prefix'] : (string) $this->config['source']['table_prefix'];
+		$new_pre  = (string) $this->state['db']['prefix'];
 		foreach ( is_array( $pkg ) && isset( $pkg['tables'] ) && is_array( $pkg['tables'] ) ? $pkg['tables'] : array() as $table ) {
-			$created[] = self::target_table( (string) $table, $old, $new );
+			$created[] = self::target_table( (string) $table, $old_pre, $new_pre );
 		}
 		foreach ( array_unique( $created ) as $table ) {
 			if ( ! isset( $map[ $table ] ) && isset( $existing[ $table ] ) ) {
@@ -2176,6 +2252,13 @@ class Installer {
 		$pct    = 0;
 		$detail = '';
 		switch ( $phase ) {
+			case 'decrypt':
+				$enc    = (int) @filesize( $this->archive_path() );
+				$blocks = max( 1, (int) ceil( max( 0, $enc - Archive_Crypto::HEADER_LEN ) / ( Archive_Crypto::CHUNK + Archive_Crypto::IV_LEN + Archive_Crypto::TAG_LEN ) ) );
+				$index  = isset( $s['decrypt']['index'] ) ? (int) $s['decrypt']['index'] : 0;
+				$pct    = 0;
+				$detail = 'Déchiffrement de l’archive : ' . min( 100, (int) round( 100 * $index / $blocks ) ) . ' %';
+				break;
 			case 'extract':
 				$e      = $s['extract'];
 				$ratio  = isset( $e['index_size'] ) && $e['index_size'] > 0 ? $e['cursor'] / $e['index_size'] : 0;
@@ -2490,6 +2573,7 @@ class Installer {
 		['check', 'db', 'run', 'done', 'restored'].forEach(function (p) { $('panel-' + p).hidden = p !== panel; });
 	}
 	function setStep(step) {
+		if (step === 'decrypt') { step = 'extract'; } // Le déchiffrement fait partie de l'étape « Extraction ».
 		var order = ['check', 'db', 'extract', 'import', 'replace', 'finalize'], idx = 'done' === step ? order.length : order.indexOf(step);
 		Array.prototype.forEach.call(document.querySelectorAll('#steps li'), function (li) {
 			var i = order.indexOf(li.getAttribute('data-step'));
@@ -2554,7 +2638,7 @@ class Installer {
 		$('pct').textContent = pct.toFixed(pct >= 100 ? 0 : 1) + ' %';
 		$('detail').textContent = d.detail || '';
 		if (d.log) { $('log').textContent = d.log.join('\n'); $('log').scrollTop = $('log').scrollHeight; }
-		var titles = { extract: 'Extraction des fichiers…', import: 'Import de la base de données…', replace: 'Remplacement des URL et des chemins…', finalize: 'Finalisation…' };
+		var titles = { decrypt: 'Déchiffrement de l’archive…', extract: 'Extraction des fichiers…', import: 'Import de la base de données…', replace: 'Remplacement des URL et des chemins…', finalize: 'Finalisation…' };
 		if (titles[d.phase]) { $('run-title').textContent = titles[d.phase]; setStep(d.phase); }
 	}
 	function done(d) {

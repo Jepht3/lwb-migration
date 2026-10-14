@@ -41,6 +41,7 @@ class Installer_Builder {
 		'class-db.php',
 		'class-mysqli-db.php',
 		'class-archiver.php',
+		'class-archive-crypto.php',
 		'class-archive-reader.php',
 		'class-sql-importer.php',
 		'class-search-replace.php',

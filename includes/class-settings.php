@@ -25,6 +25,7 @@ class Settings {
 		return array(
 			'format'          => 'auto',
 			'compress'        => true,
+			'encrypt'         => true,
 			'exclude_dirs'    => array(),
 			'exclude_exts'    => array( 'log' ),
 			'exclude_tables'  => array(),
@@ -56,6 +57,7 @@ class Settings {
 		$s['format'] = isset( $raw['format'] ) && in_array( $raw['format'], array( 'auto', 'zip', 'lwb' ), true ) ? $raw['format'] : 'auto';
 
 		$s['compress']        = ! empty( $raw['compress'] );
+		$s['encrypt']         = ! empty( $raw['encrypt'] );
 		$s['all_tables']      = ! empty( $raw['all_tables'] );
 		$s['default_exclude'] = ! empty( $raw['default_exclude'] );
 		$s['max_file_size']   = isset( $raw['max_file_size'] ) ? max( 0, absint( $raw['max_file_size'] ) ) : 0;

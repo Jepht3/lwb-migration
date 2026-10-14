@@ -59,6 +59,14 @@ class Exporter {
 				'phase'        => 'scan',
 				'direct'       => isset( $args['direct'] ) ? $args['direct'] : null,
 				'password'     => $password,
+				// Archive chiffrée avec le mot de passe de l'installeur (export classique uniquement).
+				'crypto'       => empty( $args['direct'] ) && ! empty( $settings['encrypt'] ) && Archive_Crypto::available()
+					? array(
+						'salt'       => bin2hex( random_bytes( 16 ) ),
+						'iterations' => Archive_Crypto::ITERATIONS,
+						'in'         => 0,
+					)
+					: null,
 				'format'       => $format,
 				'compress'     => (bool) $settings['compress'],
 				'archive_name' => 'archive-' . Runtime::random_hex( 32 ) . '.' . $format,
@@ -148,6 +156,8 @@ class Exporter {
 					self::step_db( $job, $rt );
 				} elseif ( 'archive' === $phase ) {
 					self::step_archive( $job, $rt );
+				} elseif ( 'encrypt' === $phase ) {
+					self::step_encrypt( $job, $rt );
 				} elseif ( 'finalize' === $phase ) {
 					self::step_finalize( $job );
 				} elseif ( 'transfer' === $phase ) {
@@ -312,7 +322,7 @@ class Exporter {
 					$d['extra'] = 2;
 				} else {
 					$archiver->finalize();
-					$d['phase'] = 'finalize';
+					$d['phase'] = empty( $d['crypto'] ) ? 'finalize' : 'encrypt';
 					break;
 				}
 			} while ( ! $rt->should_stop() );
@@ -355,6 +365,46 @@ class Exporter {
 	}
 
 	/**
+	 * Chiffrement de l'archive avec le mot de passe de l'installeur (par étapes).
+	 *
+	 * @param Job     $job Tâche.
+	 * @param Runtime $rt  Budget.
+	 * @return void
+	 */
+	private static function step_encrypt( Job $job, Runtime $rt ) {
+		$d     = &$job->data;
+		$c     = &$d['crypto'];
+		$plain = $job->path( $d['archive_name'] );
+		$enc   = $plain . Archive_Crypto::EXTENSION;
+		if ( ! is_file( $plain ) && null !== Archive_Crypto::read_header( $enc ) ) {
+			// Coupure juste après la suppression de l'archive en clair : chiffrement déjà terminé.
+			$d['plain_name']   = $d['archive_name'];
+			$d['archive_name'] = basename( $enc );
+			$d['phase']        = 'finalize';
+			return;
+		}
+		if ( 0 === (int) $c['in'] ) {
+			$job->logger()->info( 'Chiffrement de l’archive (AES-256-GCM, clé dérivée du mot de passe de l’installeur).' );
+		}
+		$state = array(
+			'in'         => (int) $c['in'],
+			'salt'       => hex2bin( $c['salt'] ),
+			'iterations' => (int) $c['iterations'],
+		);
+		$key  = Archive_Crypto::derive_key( $d['password'], $state['salt'], $state['iterations'] );
+		$done = Archive_Crypto::encrypt_step( $plain, $enc, $key, $state, $rt );
+
+		$c['in'] = $state['in'];
+		if ( $done ) {
+			@unlink( $plain ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- l'archive en clair ne doit pas rester sur le serveur.
+			$d['plain_name']   = $d['archive_name'];
+			$d['archive_name'] = basename( $enc );
+			$d['phase']        = 'finalize';
+			$job->logger()->info( 'Archive chiffrée : ' . $d['archive_name'] . '.' );
+		}
+	}
+
+	/**
 	 * Finalisation : génération de l'installeur et rangement du paquet.
 	 *
 	 * @param Job $job Tâche.
@@ -383,6 +433,11 @@ class Exporter {
 			'secret'         => Runtime::random_hex( 64 ),
 			'mode'           => 'manual',
 			'token_hash'     => '',
+			'encryption'     => empty( $d['crypto'] ) ? array() : array(
+				'salt'       => $d['crypto']['salt'],
+				'iterations' => (int) $d['crypto']['iterations'],
+				'plain'      => (string) $d['plain_name'],
+			),
 			'source'         => $d['source'],
 			'target'         => array(),
 			'db'             => array(),
@@ -493,6 +548,9 @@ class Exporter {
 				$total = $d['scanner']['bytes'] + (int) @filesize( $job->path( 'database.sql' ) ) + 1; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				$p     = 30 + 67 * min( 1, ( isset( $d['archiver']['bytes_in'] ) ? $d['archiver']['bytes_in'] : 0 ) / $total );
 				break;
+			case 'encrypt':
+				$p = 97;
+				break;
 			case 'finalize':
 				$p = 98;
 				break;
@@ -519,6 +577,7 @@ class Exporter {
 			'scan'     => __( 'Inventaire des fichiers', 'lwb-migration' ),
 			'db'       => __( 'Export de la base de données', 'lwb-migration' ),
 			'archive'  => __( 'Création de l’archive', 'lwb-migration' ),
+			'encrypt'  => __( 'Chiffrement de l’archive', 'lwb-migration' ),
 			'finalize' => __( 'Génération de l’installeur', 'lwb-migration' ),
 			'transfer' => __( 'Transfert vers le site de destination', 'lwb-migration' ),
 			'remote'   => __( 'Préparation du site de destination', 'lwb-migration' ),

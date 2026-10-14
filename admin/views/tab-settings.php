@@ -34,6 +34,13 @@ $lwbm_root   = untrailingslashit( wp_normalize_path( ABSPATH ) );
 		</div>
 		<div class="lwbm-row">
 			<div class="lwbm-row-text">
+				<label for="lwbm-encrypt"><?php esc_html_e( 'Chiffrer l’archive', 'lwb-migration' ); ?></label>
+				<p class="lwbm-hint"><?php esc_html_e( 'AES-256 avec le mot de passe de l’installeur : l’archive (fichiers, wp-config.php, base de données) est illisible sans lui, sur le serveur comme pendant le transfert FTP. La migration directe passe déjà par HTTPS.', 'lwb-migration' ); ?></p>
+			</div>
+			<label class="lwbm-switch"><input type="checkbox" id="lwbm-encrypt" name="encrypt" value="1" <?php checked( $lwbm_s['encrypt'] ); ?>><span aria-hidden="true"></span></label>
+		</div>
+		<div class="lwbm-row">
+			<div class="lwbm-row-text">
 				<label for="lwbm-keep"><?php esc_html_e( 'Paquets conservés', 'lwb-migration' ); ?></label>
 				<p class="lwbm-hint"><?php esc_html_e( 'Les plus anciens sont supprimés automatiquement.', 'lwb-migration' ); ?></p>
 			</div>

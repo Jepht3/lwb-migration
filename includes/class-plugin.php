@@ -93,7 +93,7 @@ class Plugin {
 		$tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( 'lwbbk_' ) . '%' ) );
 		foreach ( (array) $tables as $table ) {
 			if ( preg_match( '/^lwbbk_[A-Za-z0-9_$]+$/', (string) $table ) ) {
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- nom de table validé ci-dessus.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared -- nom de table validé ci-dessus (%i exige WordPress 6.2).
 				$wpdb->query( 'DROP TABLE IF EXISTS `' . $table . '`' );
 			}
 		}

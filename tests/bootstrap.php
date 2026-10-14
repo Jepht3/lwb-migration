@@ -12,7 +12,7 @@
 define( 'LWB_MIGRATION_STANDALONE', true );
 
 $lwb_includes = dirname( __DIR__ ) . '/includes/';
-foreach ( array( 'migration-exception', 'runtime', 'json-store', 'logger', 'db', 'mysqli-db', 'archiver', 'archive-reader', 'sql-importer', 'search-replace', 'db-dumper', 'file-scanner', 'job' ) as $lwb_class ) {
+foreach ( array( 'migration-exception', 'runtime', 'json-store', 'logger', 'db', 'mysqli-db', 'archiver', 'archive-reader', 'archive-crypto', 'sql-importer', 'search-replace', 'db-dumper', 'file-scanner', 'job' ) as $lwb_class ) {
 	require_once $lwb_includes . 'class-' . $lwb_class . '.php';
 }
 require_once __DIR__ . '/unit/TestCase.php';

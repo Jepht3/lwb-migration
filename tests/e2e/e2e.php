@@ -31,6 +31,12 @@ define( 'E2E_WORK', __DIR__ . '/.work' );
 define( 'E2E_PASS', 'Secret#Pass123' );
 define( 'E2E_PKG_PASSWORD', 'motdepasse-installeur-42' );
 
+// Classes autonomes de l'extension (déchiffrement de l'archive pour la contrôler).
+define( 'LWB_MIGRATION_STANDALONE', true );
+foreach ( array( 'migration-exception', 'runtime', 'archive-crypto' ) as $lwb_class ) {
+	require_once E2E_ROOT . '/includes/class-' . $lwb_class . '.php';
+}
+
 $db_host = getenv( 'LWB_E2E_DB_HOST' ) ?: 'localhost';
 $db_user = getenv( 'LWB_E2E_DB_USER' ) ?: 'root';
 $db_pass = (string) getenv( 'LWB_E2E_DB_PASSWORD' );
@@ -573,7 +579,7 @@ drive_job( $admin, $src_url, $nonce, $job );
 list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'packages' );
 $pkg = $j['data'][0];
 ok( 'ZIP' === $pkg['format'] && $pkg['protected'], "paquet listé : {$pkg['size']}, {$pkg['files']} fichiers, {$pkg['tables']} tables" );
-ok( preg_match( '/^archive-[a-f0-9]{32}\.zip$/', $pkg['archive'] ), 'nom d’archive aléatoire : ' . $pkg['archive'] );
+ok( preg_match( '/^archive-[a-f0-9]{32}\.zip\.lwbenc$/', $pkg['archive'] ), 'nom d’archive aléatoire, archive chiffrée : ' . $pkg['archive'] );
 
 // Stockage protégé.
 $storage = glob( "$src_abs/wp-content/uploads/lwb-migration-*" )[0];
@@ -592,8 +598,16 @@ ok( 200 === $admin->download( $pkg['urls']['log'], E2E_WORK . '/export-log.txt' 
 $anon_dl = ( new Client( 'x' ) )->request( $pkg['urls']['archive'] );
 ok( in_array( $anon_dl['code'], array( 400, 403 ), true ) && strlen( $anon_dl['body'] ) < 1000, 'téléchargement refusé sans session (HTTP ' . $anon_dl['code'] . ')' );
 
+// Archive chiffrée : illisible sans le mot de passe, ZIP standard une fois déchiffrée.
+$enc_raw = file_get_contents( "$dst_root/{$pkg['archive']}" );
+ok( 0 === strpos( $enc_raw, \LwbMigration\Archive_Crypto::MAGIC ) && false === strpos( $enc_raw, 'database.sql' ) && false === strpos( $enc_raw, 'DB_PASSWORD' ), 'archive chiffrée : aucun nom de fichier ni contenu lisible' );
+unset( $enc_raw );
+$head  = \LwbMigration\Archive_Crypto::read_header( "$dst_root/{$pkg['archive']}" );
+$plain = E2E_WORK . '/export-dechiffre.zip';
+$dec   = array();
+\LwbMigration\Archive_Crypto::decrypt_step( "$dst_root/{$pkg['archive']}", $plain, \LwbMigration\Archive_Crypto::derive_key( E2E_PKG_PASSWORD, $head['salt'], $head['iterations'] ), $dec );
 $zip = new ZipArchive();
-ok( true === $zip->open( "$dst_root/{$pkg['archive']}", ZipArchive::CHECKCONS ), 'l’archive est un ZIP standard valide (ZipArchive::CHECKCONS)' );
+ok( true === $zip->open( $plain, ZipArchive::CHECKCONS ), 'archive déchiffrée : ZIP standard valide (ZipArchive::CHECKCONS)' );
 $names = array();
 for ( $i = 0; $i < $zip->numFiles; $i++ ) {
 	$names[] = $zip->getNameIndex( $i );
@@ -759,11 +773,13 @@ if ( 2 === $h1_rc || 127 === $h1_rc ) {
 $bi = new Client( 'b-installer' );
 $bi->request( $d['installer_url'] ); // Pose le cookie et redirige.
 list( $api_b, $final_b ) = drive_installer( $bi, "$b_url/installer.php", array() );
+// Avant toute visite de l'administration (qui supprime l'installeur) : lien à usage unique.
+$reuse = ( new Client( 'b-reuse' ) )->request( $d['installer_url'] );
+ok( false !== strpos( $reuse['body'], 'déjà utilisé' ), 'lien de l’installeur refusé une fois l’installation faite (usage unique)' );
+ok( false !== strpos( ( new Client( 'b-reuse2' ) )->request( "$b_url/installer.php" )['body'], 'Accès réservé' ), 'installeur toujours fermé sans session' );
 verify_site( 'direct', $b_url, $b_root, 'lwb_e2e_b', 'bwp_', $src_url, $src_abs );
 ok( E2E_SUSPECT === @file_get_contents( "$b_root/wp-content/uploads/2020/suspect.jpg" ), 'fichier bloqué par le pare-feu en clair transféré intact (corps brouillés)' );
 ok( false === get_option_b(), 'clé de migration consommée (usage unique)' );
-$reuse = ( new Client( 'b-reuse' ) )->request( $d['installer_url'] );
-ok( false !== strpos( $reuse['body'], 'déjà utilisé' ), 'lien de l’installeur refusé une fois l’installation faite (usage unique)' );
 $api_b( 'cleanup' );
 
 function get_option_b() {
@@ -797,6 +813,11 @@ $m3->query( 'CREATE DATABASE lwb_e2e_d3' );
 $m3->select_db( 'lwb_e2e_d3' );
 $m3->query( 'CREATE TABLE srcwp_posts (old_column INT)' );
 $m3->query( 'CREATE TABLE srcwp_options (x INT)' );
+$m3->query( 'INSERT INTO srcwp_posts VALUES (4242)' );
+// Restes de l'ancien site de destination : fichier écrasé par l'archive, extension absente du source.
+file_put_contents( "$d3_abs/index.php", "<?php // ancien index\n" );
+mkdir( "$d3_abs/wp-content/plugins/vieux-plugin", 0755, true );
+file_put_contents( "$d3_abs/wp-content/plugins/vieux-plugin/vieux.php", "<?php // vieux\n" );
 start_server( 8104, $d3_root, 4, 'd3' );
 $d3_url = 'http://localhost:8104/sous-dossier';
 $c3     = new Client( 'd3' );
@@ -815,6 +836,28 @@ list( $api3, $final3 ) = drive_installer(
 	$pkg3_pw
 );
 verify_site( 'lwb', $d3_url, $d3_abs, 'lwb_e2e_d3', 'srcwp_', $src_url, $src_abs );
+
+// Sauvegarde de la destination : tables remplacées renommées, fichier écrasé et extension inutile mis de côté.
+$m3 = db( 'lwb_e2e_d3' );
+ok( '4242' === scalar( $m3, 'SELECT old_column FROM lwbbk_srcwp_posts' ), 'sauvegarde : ancienne table srcwp_posts conservée sous le nom lwbbk_srcwp_posts' );
+ok( ! is_dir( "$d3_abs/wp-content/plugins/vieux-plugin" ) && glob( "$d3_abs/wp-content/lwb-mis-de-cote-*/plugins/vieux-plugin" ), 'extension absente du site source mise de côté' );
+ok( false === strpos( (string) file_get_contents( "$d3_abs/index.php" ), 'ancien index' ), 'index.php du site source installé' );
+
+// Restauration : la destination redevient telle qu'elle était avant l'installation.
+$restored = null;
+for ( $i = 0; $i < 200; $i++ ) {
+	$restored = $api3( 'restore' );
+	if ( empty( $restored['ok'] ) || 'restored' === $restored['phase'] ) {
+		break;
+	}
+	usleep( 100000 );
+}
+ok( ! empty( $restored['ok'] ) && 'restored' === $restored['phase'], 'restauration de l’ancien site terminée' ) || print( '    ' . json_encode( $restored, JSON_UNESCAPED_UNICODE ) . "\n" );
+$m3 = db( 'lwb_e2e_d3' );
+ok( '4242' === scalar( $m3, 'SELECT old_column FROM srcwp_posts' ), 'restauration : table d’origine rétablie (avec ses données)' );
+ok( null === scalar( $m3, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'lwb_e2e_d3' AND TABLE_NAME IN ('srcwp_users','lwbbk_srcwp_posts') HAVING COUNT(*) > 0" ), 'restauration : tables importées supprimées, plus de copie lwbbk_' );
+ok( false !== strpos( (string) file_get_contents( "$d3_abs/index.php" ), 'ancien index' ), 'restauration : fichier écrasé remis en place' );
+ok( is_file( "$d3_abs/wp-content/plugins/vieux-plugin/vieux.php" ), 'restauration : extension mise de côté remise en place' );
 $api3( 'cleanup' );
 
 /* ================================================================== */
