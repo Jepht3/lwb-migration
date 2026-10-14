@@ -291,11 +291,11 @@ class Installer {
 					'path'     => $path,
 					'secure'   => $this->is_https(),
 					'httponly' => true,
-					'samesite' => 'Strict',
+					'samesite' => 'Lax',
 				)
 			);
 		} else {
-			setcookie( self::COOKIE, $value, time() + self::AUTH_TTL, $path . '; samesite=Strict', '', $this->is_https(), true );
+			setcookie( self::COOKIE, $value, time() + self::AUTH_TTL, $path . '; samesite=Lax', '', $this->is_https(), true );
 		}
 	}
 

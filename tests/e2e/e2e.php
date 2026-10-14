@@ -708,6 +708,15 @@ ok( false !== strpos( $page['body'], 'Accès réservé' ), 'installeur de destin
 $bad = $forged->request( "$b_url/installer.php?lwb_token=" . str_repeat( 'a', 96 ) );
 ok( false !== strpos( $bad['body'], 'invalide' ), 'jeton falsifié refusé' );
 
+// Clic sur le lien depuis le site source (autre site), dans un vrai navigateur : le cookie de
+// session doit survivre à la redirection (SameSite=Strict le faisait ignorer → « Accès réservé »).
+exec( 'node ' . escapeshellarg( __DIR__ . '/cross-site-link.js' ) . ' ' . escapeshellarg( "$src_url/wp-login.php" ) . ' ' . escapeshellarg( $d['installer_url'] ) . ' 2>&1', $h1_out, $h1_rc );
+if ( 2 === $h1_rc || 127 === $h1_rc ) {
+	echo "    (navigateur indisponible : vérification du lien ouvert depuis un autre site ignorée)\n";
+} else {
+	ok( 0 === $h1_rc && false === strpos( implode( ' ', $h1_out ), 'Accès réservé' ) && false === strpos( implode( ' ', $h1_out ), 'invalide' ), 'lien de l’installeur ouvert depuis le site source dans un navigateur : session ouverte (' . implode( ' ', $h1_out ) . ')' );
+}
+
 $bi = new Client( 'b-installer' );
 $bi->request( $d['installer_url'] ); // Pose le cookie et redirige.
 list( $api_b, $final_b ) = drive_installer( $bi, "$b_url/installer.php", array() );
@@ -774,6 +783,8 @@ step( 'Scénario 4 – Mises à jour automatiques (wordpress.org injoignable, v�
 $upd_dir = E2E_WORK . '/update';
 @mkdir( $upd_dir );
 $zipfile = "$src_root/lwb-update.zip";
+preg_match( "/'LWB_MIGRATION_VERSION', '([0-9.]+)'/", file_get_contents( dirname( __DIR__, 2 ) . '/lwb-migration.php' ), $cur_v );
+$cur_v = $cur_v[1];
 $zip     = new ZipArchive();
 $zip->open( $zipfile, ZipArchive::CREATE | ZipArchive::OVERWRITE );
 $it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( "$src_abs/wp-content/plugins/lwb-migration", FilesystemIterator::SKIP_DOTS ) );
@@ -782,7 +793,7 @@ foreach ( $it as $f ) {
 	$data = file_get_contents( $f->getPathname() );
 	if ( 'lwb-migration/lwb-migration.php' === $rel ) {
 		$data = preg_replace( '/Version:(\s+)[0-9.]+/', 'Version:${1}9.9.9', $data );
-		$data = str_replace( "'LWB_MIGRATION_VERSION', '" . '1.1.0' . "'", "'LWB_MIGRATION_VERSION', '9.9.9'", $data );
+		$data = str_replace( "'LWB_MIGRATION_VERSION', '" . $cur_v . "'", "'LWB_MIGRATION_VERSION', '9.9.9'", $data );
 	}
 	$zip->addFromString( $rel, $data );
 }
@@ -823,7 +834,7 @@ $upgrade = 'require ABSPATH_ . "/wp-load.php"; wp_set_current_user( 1 ); require
 	$err = $u->skin->result;
 	echo json_encode( array( "result" => is_wp_error( $r ) ? $r->get_error_message() : $r, "skin" => is_wp_error( $err ) ? $err->get_error_code() : null, "version" => $d["Version"], "messages" => $u->skin->get_upgrade_messages() ) );';
 $bad = json_decode( substr( $o = run_wp_php( $src_abs, $upgrade ), strpos( $o, '{' ) ), true );
-ok( '1.1.0' === $bad['version'] && false !== strpos( implode( ' ', $bad['messages'] ), 'SHA-256' ), 'zip à l’empreinte SHA-256 incorrecte refusé (extension inchangée)' ) || print( '    ' . json_encode( $bad, JSON_UNESCAPED_UNICODE ) . "\n" );
+ok( $cur_v === $bad['version'] && false !== strpos( implode( ' ', $bad['messages'] ), 'SHA-256' ), 'zip à l’empreinte SHA-256 incorrecte refusé (extension inchangée)' ) || print( '    ' . json_encode( $bad, JSON_UNESCAPED_UNICODE ) . "\n" );
 
 $manifest['sha256'] = hash_file( 'sha256', $zipfile );
 file_put_contents( "$src_root/manifest.json", json_encode( $manifest ) );
