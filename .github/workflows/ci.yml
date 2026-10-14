@@ -35,7 +35,7 @@ jobs:
           coverage: none
       - run: composer install --no-interaction --no-progress
       - name: Standards WordPress + compatibilité PHP 7.4–8.4
-        run: vendor/bin/phpcs -q
+        run: vendor/bin/phpcs -q --report=checkstyle | cs2pr
       - name: Tests unitaires
         run: vendor/bin/phpunit
         timeout-minutes: 5
