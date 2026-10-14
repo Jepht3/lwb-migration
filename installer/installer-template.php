@@ -1144,6 +1144,7 @@ class Installer {
 			$db->query( 'DELETE FROM ' . Db::ident( $options ) . " WHERE option_name LIKE '\\_transient\\_%' OR option_name LIKE '\\_site\\_transient\\_%' OR option_name = 'rewrite_rules'" );
 			$log->info( 'Transients et règles de réécriture vidés.' );
 		}
+		$this->purge_builder_caches( $db );
 		$this->fix_multisite( $db );
 		$db->close();
 
@@ -1173,6 +1174,47 @@ class Installer {
 		$this->state['phase']   = 'done';
 		$this->state['done_at'] = time();
 		$log->info( sprintf( 'Migration terminée en %d s. Avertissements : %d, erreurs SQL : %d.', time() - (int) $this->state['started'], $this->state['warnings'], $this->state['errors'] ) );
+	}
+
+	/**
+	 * Vide les caches des constructeurs de pages (Elementor).
+	 *
+	 * Elementor garde dans la base un rendu des éléments (réglages encodés en base64,
+	 * donc invisibles pour le rechercher/remplacer) et l'index de ses fichiers CSS,
+	 * qui ne sont pas exportés : sans ce nettoyage, le site migré affiche des liens vers
+	 * l'ancien domaine et des feuilles de style introuvables. Même effet que
+	 * « Elementor › Outils › Régénérer les fichiers et données » : tout est recréé à la
+	 * première visite.
+	 *
+	 * @param Db $db Connexion.
+	 * @return void
+	 */
+	private function purge_builder_caches( Db $db ) {
+		$meta_keys = array( '_elementor_css', '_elementor_element_cache', '_elementor_page_assets', '_elementor_inline_svg' );
+		$options   = array( '_elementor_global_css', '_elementor_assets_data', 'elementor-custom-breakpoints-files' );
+		$purged    = 0;
+		foreach ( $this->state['import']['tables'] as $table ) {
+			if ( preg_match( '/postmeta$/', $table ) ) {
+				$list = implode( ',', array_map( array( Db::class, 'literal' ), $meta_keys ) );
+				if ( $db->query( 'DELETE FROM ' . Db::ident( $table ) . ' WHERE meta_key IN (' . $list . ')' ) ) {
+					$purged += max( 0, $db->affected_rows() );
+				}
+			} elseif ( preg_match( '/options$/', $table ) ) {
+				$list = implode( ',', array_map( array( Db::class, 'literal' ), $options ) );
+				if ( $db->query( 'DELETE FROM ' . Db::ident( $table ) . ' WHERE option_name IN (' . $list . ')' ) ) {
+					$purged += max( 0, $db->affected_rows() );
+				}
+			}
+		}
+		// Fichiers CSS générés (exclus de l'export) : ceux de l'ancien site de destination
+		// porteraient les mêmes noms (post-123.css) avec un autre contenu.
+		$files = glob( $this->root . '/wp-content/uploads/elementor/css/*.css' );
+		foreach ( is_array( $files ) ? $files : array() as $file ) {
+			@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		if ( $purged > 0 || ! empty( $files ) ) {
+			$this->log()->info( sprintf( 'Caches Elementor vidés (%d entrée(s), %d fichier(s) CSS) : ils seront régénérés à la première visite.', $purged, is_array( $files ) ? count( $files ) : 0 ) );
+		}
 	}
 
 	/**

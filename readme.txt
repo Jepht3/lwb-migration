@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.2
+Stable tag: 1.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,9 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.2.3 =
+* Correction importante : sur les sites Elementor, le site migré pouvait garder des liens vers l'ancien domaine (cache de rendu d'Elementor 4, dont les réglages sont encodés en base64) et perdre sa mise en page (feuilles de style CSS référencées mais absentes). L'installeur vide désormais ces caches, comme « Elementor › Outils › Régénérer les fichiers et données » : tout est recréé à la première visite
 
 = 1.2.2 =
 * Affichage sur mobile et tablette entièrement revu : plus aucun chevauchement ni débordement de 320 à 1280 px, dans l'administration comme dans l'installeur (pourcentage de progression, titres sur deux lignes, onglets, longs noms de fichiers et adresses, rappel du mot de passe, liste des vérifications de l'installeur)

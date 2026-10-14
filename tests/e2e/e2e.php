@@ -507,6 +507,15 @@ for ( $i = 0; $i < 50; $i++ ) {
 }
 $wpdb->insert( "{$wpdb->prefix}nokey", array( 'url' => "$url/nokey" ) );
 
+// Caches Elementor 4 : rendu des éléments avec réglages en base64 (URL invisible pour le
+// rechercher/remplacer) et index des CSS générés (dossier exclu de l'export).
+$el = base64_encode( json_encode( array( 'id' => 'hero', 'settings' => array( 'link' => array( '$$type' => 'url', 'value' => "$url/contact/" ) ) ) ) );
+update_post_meta( 1, '_elementor_element_cache', wp_slash( json_encode( array( 'timeout' => time() + 86400, 'value' => array( 'content' => '[elementor-element k="x" data="' . $el . '"]' ) ) ) ) );
+update_post_meta( 1, '_elementor_css', array( 'time' => time(), 'status' => 'file', 'fonts' => array() ) );
+update_option( '_elementor_global_css', array( 'time' => time(), 'status' => 'file' ) );
+wp_mkdir_p( $up['basedir'] . '/elementor/css' );
+file_put_contents( $up['basedir'] . '/elementor/css/post-1.css', '.source{}' );
+
 // Fichiers : gros fichier (copié sur plusieurs étapes), unicode, dossier vide, exclusions.
 $h = fopen( $up['basedir'] . '/gros-fichier.bin', 'wb' );
 for ( $i = 0; $i < 30; $i++ ) { fwrite( $h, random_bytes( 1048576 ) ); }
@@ -567,6 +576,9 @@ ok( 200 !== $direct['code'] || false === strpos( $direct['body'], 'LwbMigration'
 
 $dst_root = E2E_WORK . '/dst';
 mkdir( $dst_root );
+// CSS Elementor de l'ancien site de destination, au même nom qu'un fichier du site source.
+mkdir( "$dst_root/wp-content/uploads/elementor/css", 0755, true );
+file_put_contents( "$dst_root/wp-content/uploads/elementor/css/post-1.css", '.ancien-site{}' );
 ok( 200 === $admin->download( $pkg['urls']['archive'], "$dst_root/{$pkg['archive']}" ), 'archive téléchargée' );
 ok( 200 === $admin->download( $pkg['urls']['installer'], "$dst_root/installer.php" ), 'installer.php téléchargé' );
 ok( 200 === $admin->download( $pkg['urls']['log'], E2E_WORK . '/export-log.txt' ) && false !== strpos( file_get_contents( E2E_WORK . '/export-log.txt' ), 'Paquet prêt' ), 'journal d’export téléchargeable' );
@@ -632,6 +644,8 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 	}
 	ok( 0 === $left, "$label : 0 occurrence de l’ancienne URL / de l’ancien chemin dans la base" );
 	ok( $url === scalar( $m, "SELECT option_value FROM {$prefix}options WHERE option_name = 'siteurl'" ), "$label : siteurl = $url" );
+	$caches = (int) scalar( $m, "SELECT COUNT(*) FROM {$prefix}postmeta WHERE meta_key IN ('_elementor_element_cache','_elementor_css')" ) + (int) scalar( $m, "SELECT COUNT(*) FROM {$prefix}options WHERE option_name = '_elementor_global_css'" );
+	ok( 0 === $caches && ! glob( "$root/wp-content/uploads/elementor/css/*.css" ), "$label : caches Elementor vidés (rendu en base64, index et fichiers CSS) pour être régénérés" );
 
 	// 2) Données sérialisées intactes et mises à jour.
 	$opt = unserialize( scalar( $m, "SELECT option_value FROM {$prefix}options WHERE option_name = 'lwb_test_option'" ) );
