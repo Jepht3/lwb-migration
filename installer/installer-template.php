@@ -1499,6 +1499,26 @@ class Installer {
 	// ------------------------------------------------------------------
 
 	/**
+	 * Icônes SVG en ligne (aucune ressource externe).
+	 *
+	 * @param string $name Nom.
+	 * @return string
+	 */
+	private static function icon( $name ) {
+		$paths = array(
+			'logo'   => '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
+			'lock'   => '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+			'check'  => '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+			'alert'  => '<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>',
+			'server' => '<rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/>',
+			'db'     => '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/>',
+			'rocket' => '<path d="M5 15c-1 1-1.5 4-1.5 4s3-.5 4-1.5M9 15l-3-3c1-4 4.5-8 10.5-8.5C16 9.5 12 13 9 15zM14.5 9.5h.01"/>',
+			'file'   => '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+		);
+		return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ( isset( $paths[ $name ] ) ? $paths[ $name ] : '' ) . '</svg>';
+	}
+
+	/**
 	 * Page d'erreur bloquante.
 	 *
 	 * @param string $title Titre.
@@ -1508,7 +1528,7 @@ class Installer {
 	 */
 	private function fatal_page( $title, $text, $kind = 'error' ) {
 		$this->page_header( 'Lwb Migration' );
-		echo '<main class="card narrow"><div class="msg ' . self::h( $kind ) . '"><strong>' . self::h( $title ) . '</strong><p>' . self::h( $text ) . '</p></div></main>';
+		echo '<main class="solo"><div class="solo-card"><span class="solo-icon ' . self::h( $kind ) . '">' . self::icon( 'ok' === $kind ? 'check' : 'alert' ) . '</span><h1>' . self::h( $title ) . '</h1><p class="muted">' . self::h( $text ) . '</p></div></main>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- icônes statiques.
 		$this->page_footer();
 		exit;
 	}
@@ -1521,20 +1541,24 @@ class Installer {
 	private function render_login() {
 		$this->page_header( 'Installation protégée' );
 		if ( 'direct' === $this->config['mode'] ) {
-			echo '<main class="card narrow"><div class="msg error"><strong>Accès réservé.</strong><p>Ouvrez l’installeur depuis le lien affiché sur le site source à la fin de la migration directe.</p></div></main>';
+			echo '<main class="solo"><div class="solo-card"><span class="solo-icon error">' . self::icon( 'lock' ) . '</span><h1>Accès réservé</h1><p class="muted">Ouvrez l’installeur depuis le lien affiché sur le site source à la fin de la migration directe.</p></div></main>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- icône statique.
 			$this->page_footer();
 			return;
 		}
 		?>
-		<main class="card narrow">
-			<h1>Installation protégée</h1>
-			<p class="muted">Saisissez le mot de passe défini lors de l’export du site.</p>
-			<form id="login" autocomplete="off">
-				<label for="pw">Mot de passe</label>
-				<input type="password" id="pw" name="password" required autofocus>
-				<div class="msg error" id="login-error" hidden></div>
-				<button type="submit" class="btn primary">Continuer</button>
-			</form>
+		<main class="solo">
+			<div class="solo-card">
+				<span class="solo-icon"><?php echo self::icon( 'lock' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+				<h1>Installation protégée</h1>
+				<p class="muted">Saisissez le mot de passe défini lors de l’export du site source.</p>
+				<form id="login" autocomplete="off">
+					<label for="pw">Mot de passe</label>
+					<input type="password" id="pw" name="password" required autofocus placeholder="••••••••••••">
+					<div class="msg error" id="login-error" hidden></div>
+					<button type="submit" class="btn primary block">Déverrouiller l’installation</button>
+				</form>
+				<p class="brand-foot"><?php echo self::icon( 'logo' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> Lwb Migration</p>
+			</div>
 		</main>
 		<script>
 		document.getElementById( 'login' ).addEventListener( 'submit', function ( e ) {
@@ -1562,47 +1586,56 @@ class Installer {
 	 * @return void
 	 */
 	private function render_app() {
-		$src  = $this->config['source'];
-		$boot = array(
+		$src   = $this->config['source'];
+		$boot  = array(
 			'csrf'   => $this->csrf_token(),
 			'self'   => $this->self,
 			'mode'   => $this->config['mode'],
 			'phases' => self::PHASES,
 		);
+		$steps = array(
+			'check'    => array( 'Vérification', 'Serveur et archive' ),
+			'db'       => array( 'Base de données', 'Accès MySQL' ),
+			'extract'  => array( 'Extraction', 'Fichiers du site' ),
+			'import'   => array( 'Import SQL', 'Tables et contenus' ),
+			'replace'  => array( 'Rechercher / remplacer', 'URL et chemins' ),
+			'finalize' => array( 'Finalisation', 'wp-config, .htaccess' ),
+		);
 		$this->page_header( 'Installation – ' . $src['site_name'] );
 		?>
 		<div class="layout">
-			<aside class="steps" aria-label="Étapes">
-				<div class="brand"><span class="logo" aria-hidden="true">⇄</span> Lwb Migration</div>
-				<ol id="steps">
-					<li data-step="check">Vérification</li>
-					<li data-step="db">Base de données</li>
-					<li data-step="extract">Extraction</li>
-					<li data-step="import">Import SQL</li>
-					<li data-step="replace">Rechercher / remplacer</li>
-					<li data-step="finalize">Finalisation</li>
+			<aside class="sidebar" aria-label="Étapes">
+				<div class="brand"><span class="logo"><?php echo self::icon( 'logo' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span><span>Lwb Migration<small>Assistant d’installation</small></span></div>
+				<ol id="steps" class="stepper">
+					<?php foreach ( $steps as $key => $step ) : ?>
+						<li data-step="<?php echo self::h( $key ); ?>"><span class="step-dot"></span><span class="step-text"><strong><?php echo self::h( $step[0] ); ?></strong><small><?php echo self::h( $step[1] ); ?></small></span></li>
+					<?php endforeach; ?>
 				</ol>
 				<div class="source">
-					<strong>Site source</strong>
-					<span><?php echo self::h( $src['site_url'] ); ?></span>
-					<span>WordPress <?php echo self::h( $src['wp_version'] ); ?> · PHP <?php echo self::h( $src['php_version'] ); ?></span>
-					<span>Paquet du <?php echo self::h( date( 'd/m/Y H:i', (int) $this->config['created'] ) ); ?></span>
+					<span class="source-label">Site source</span>
+					<strong><?php echo self::h( $src['site_name'] ); ?></strong>
+					<span class="source-url"><?php echo self::h( $src['site_url'] ); ?></span>
+					<span class="source-tags"><span>WP <?php echo self::h( $src['wp_version'] ); ?></span><span>PHP <?php echo self::h( $src['php_version'] ); ?></span><span><?php echo self::h( date( 'd/m/Y', (int) $this->config['created'] ) ); ?></span></span>
 				</div>
 			</aside>
 
-			<main class="card">
+			<main class="content">
 				<div class="msg error" id="error" role="alert" hidden></div>
 
-				<section id="panel-check" hidden>
-					<h1>1. Vérification de l’environnement</h1>
-					<p class="muted">Contrôle du serveur de destination et de l’archive.</p>
+				<section id="panel-check" class="panel" hidden>
+					<header class="panel-head">
+						<span class="panel-icon"><?php echo self::icon( 'server' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+						<div><span class="eyebrow">Étape 1 sur 6</span><h1>Vérification de l’environnement</h1><p class="muted">Contrôle du serveur de destination et de l’archive.</p></div>
+					</header>
 					<table class="checks"><tbody id="checks"></tbody></table>
-					<div class="actions"><button type="button" class="btn primary" id="to-db" disabled>Continuer</button></div>
+					<div class="actions end"><button type="button" class="btn primary" id="to-db" disabled>Continuer →</button></div>
 				</section>
 
-				<section id="panel-db" hidden>
-					<h1>2. Base de données</h1>
-					<p class="muted" id="db-hint">Saisissez les accès fournis par votre hébergeur. La base doit exister (ou cochez « créer »).</p>
+				<section id="panel-db" class="panel" hidden>
+					<header class="panel-head">
+						<span class="panel-icon"><?php echo self::icon( 'db' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+						<div><span class="eyebrow">Étape 2 sur 6</span><h1>Base de données</h1><p class="muted" id="db-hint">Saisissez les accès fournis par votre hébergeur. La base doit exister (ou cochez « créer »).</p></div>
+					</header>
 					<form id="db-form" autocomplete="off">
 						<div class="grid">
 							<div><label for="host">Hôte</label><input id="host" name="host" required placeholder="localhost"></div>
@@ -1610,10 +1643,10 @@ class Installer {
 							<div><label for="user">Utilisateur</label><input id="user" name="user" required autocomplete="off"></div>
 							<div><label for="password">Mot de passe</label><input id="password" name="password" type="password" autocomplete="new-password"></div>
 							<div><label for="prefix">Préfixe des tables</label><input id="prefix" name="prefix" required pattern="[A-Za-z0-9_]+"></div>
-							<div class="check"><label><input type="checkbox" name="create" value="1"> Créer la base si elle n’existe pas</label></div>
+							<div class="check"><label class="toggle"><input type="checkbox" name="create" value="1"><span class="toggle-ui" aria-hidden="true"></span> Créer la base si elle n’existe pas</label></div>
 						</div>
-						<details>
-							<summary>Adresse et dossier du nouveau site (détectés automatiquement)</summary>
+						<details class="advanced">
+							<summary>Adresse et dossier du nouveau site <span class="muted">— détectés automatiquement</span></summary>
 							<div class="grid">
 								<div class="full"><label for="site_url">Adresse du site (WordPress)</label><input id="site_url" name="site_url" required></div>
 								<div class="full"><label for="home_url">Adresse de la page d’accueil</label><input id="home_url" name="home_url" required></div>
@@ -1621,34 +1654,38 @@ class Installer {
 							</div>
 						</details>
 						<div class="msg" id="db-result" hidden></div>
-						<div class="actions">
+						<div class="actions between">
 							<button type="button" class="btn" id="test-db">Tester la connexion</button>
-							<button type="submit" class="btn primary" id="start">Lancer l’installation</button>
+							<button type="submit" class="btn primary" id="start"><?php echo self::icon( 'rocket' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> Lancer l’installation</button>
 						</div>
-						<p class="muted small">Les tables du même nom seront remplacées. Les fichiers existants portant le même nom seront écrasés.</p>
+						<p class="muted small">Les tables portant le même nom seront remplacées, ainsi que les fichiers existants du même nom.</p>
 					</form>
 				</section>
 
-				<section id="panel-run" hidden>
-					<h1 id="run-title">Installation en cours…</h1>
-					<p class="muted">Ne fermez pas cette page. En cas de coupure, rechargez-la : l’installation reprendra là où elle s’était arrêtée.</p>
-					<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-fill"></div></div>
-					<p class="progress-line"><strong id="pct">0 %</strong> <span id="detail"></span></p>
-					<p class="muted small" id="retry"></p>
+				<section id="panel-run" class="panel" hidden>
+					<header class="panel-head">
+						<span class="panel-icon spin"><?php echo self::icon( 'file' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+						<div><span class="eyebrow">Installation</span><h1 id="run-title">Installation en cours…</h1><p class="muted">Ne fermez pas cette page. En cas de coupure, rechargez-la : l’installation reprendra là où elle s’était arrêtée.</p></div>
+					</header>
+					<div class="progress-card">
+						<div class="progress-top"><strong id="pct">0 %</strong><span id="detail" class="muted"></span></div>
+						<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-fill"></div></div>
+						<p class="muted small" id="retry"></p>
+					</div>
 					<pre id="log" class="log"></pre>
 				</section>
 
-				<section id="panel-done" hidden>
-					<div class="success-icon" aria-hidden="true">✓</div>
+				<section id="panel-done" class="panel done" hidden>
+					<div class="success-icon"><?php echo self::icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
 					<h1>Migration réussie !</h1>
-					<p>Votre site est disponible à l’adresse <a id="site-link" target="_blank" rel="noopener"></a>.</p>
+					<p class="lead">Votre site est en ligne à l’adresse <a id="site-link" target="_blank" rel="noopener"></a></p>
 					<p class="muted">Connectez-vous avec les identifiants administrateur du site source.</p>
 					<ul id="notes" class="notes"></ul>
-					<div class="actions">
+					<div class="actions center">
 						<button type="button" class="btn primary" id="cleanup">Supprimer les fichiers d’installation et ouvrir l’administration</button>
 						<a class="btn" href="?lwb_log=1">Télécharger le journal</a>
 					</div>
-					<p class="muted small">Par sécurité, l’installeur et son dossier de travail sont supprimés automatiquement une heure après la fin de l’installation s’ils sont encore là.</p>
+					<p class="muted small">Par sécurité, l’installeur et son dossier de travail sont supprimés automatiquement une heure après la fin de l’installation.</p>
 				</section>
 			</main>
 		</div>
@@ -1673,7 +1710,7 @@ class Installer {
 		['check', 'db', 'run', 'done'].forEach(function (p) { $('panel-' + p).hidden = p !== panel; });
 	}
 	function setStep(step) {
-		var order = ['check', 'db', 'extract', 'import', 'replace', 'finalize'], idx = order.indexOf(step);
+		var order = ['check', 'db', 'extract', 'import', 'replace', 'finalize'], idx = 'done' === step ? order.length : order.indexOf(step);
 		Array.prototype.forEach.call(document.querySelectorAll('#steps li'), function (li) {
 			var i = order.indexOf(li.getAttribute('data-step'));
 			li.className = i < idx ? 'done' : (i === idx ? 'current' : '');
@@ -1842,62 +1879,137 @@ JS;
 <meta name="robots" content="noindex, nofollow">
 <title><?php echo self::h( $title ); ?></title>
 <style>
-:root { --accent: #2563eb; --accent-d: #1d4ed8; --ok: #16a34a; --warn: #b45309; --err: #dc2626; --bg: #f1f5f9; --card: #fff; --text: #0f172a; --muted: #64748b; --line: #e2e8f0; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0b1120; --card: #111827; --text: #e5e7eb; --muted: #94a3b8; --line: #1f2937; } }
+:root { --p: #4f46e5; --p2: #7c3aed; --p-soft: #eef2ff; --ok: #059669; --ok-soft: #ecfdf5; --warn: #d97706; --warn-soft: #fffbeb; --err: #dc2626; --err-soft: #fef2f2; --bg: #f4f5fb; --card: #fff; --text: #0f172a; --muted: #64748b; --line: #e5e7eb; --field: #fff; --grad: linear-gradient(135deg, var(--p), var(--p2)); }
+@media (prefers-color-scheme: dark) { :root { --bg: #0b0f1a; --card: #121826; --text: #e5e7eb; --muted: #94a3b8; --line: #1f2937; --field: #0f1522; --p-soft: rgba(99,102,241,.14); --ok-soft: rgba(16,185,129,.12); --warn-soft: rgba(245,158,11,.12); --err-soft: rgba(239,68,68,.12); } }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
-a { color: var(--accent); }
-h1 { font-size: 22px; margin: 0 0 6px; }
-.layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; max-width: 1080px; margin: 32px auto; padding: 0 16px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-.card.narrow { max-width: 460px; margin: 64px auto; }
-.steps { position: sticky; top: 24px; align-self: start; }
-.brand { font-weight: 700; font-size: 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
-.logo { display: inline-flex; width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: #fff; align-items: center; justify-content: center; }
-.steps ol { list-style: none; margin: 0; padding: 0; counter-reset: s; }
-.steps li { counter-increment: s; padding: 9px 12px; margin-bottom: 4px; border-radius: 8px; color: var(--muted); display: flex; align-items: center; gap: 10px; }
-.steps li::before { content: counter(s); display: inline-flex; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex: none; }
-.steps li.current { background: var(--card); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
-.steps li.current::before { border-color: var(--accent); color: var(--accent); }
-.steps li.done { color: var(--text); }
-.steps li.done::before { content: "✓"; background: var(--ok); border-color: var(--ok); color: #fff; }
-.source { margin-top: 20px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; word-break: break-all; }
-.source strong { color: var(--text); }
+html, body { min-height: 100%; }
+body { margin: 0; font: 15px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+a { color: var(--p); }
+h1 { font-size: 24px; line-height: 1.25; letter-spacing: -.01em; margin: 0 0 6px; }
+.ico { width: 20px; height: 20px; flex: none; }
 .muted { color: var(--muted); } .small { font-size: 13px; }
-.checks { width: 100%; border-collapse: collapse; margin: 16px 0; }
-.checks td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-.checks td:first-child { width: 40%; font-weight: 500; }
-.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
-.pill.ok { background: #dcfce7; color: #166534; } .pill.warn { background: #fef3c7; color: #92400e; } .pill.error { background: #fee2e2; color: #991b1b; }
-.help { font-size: 13px; color: var(--muted); margin-top: 4px; }
-label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-input[type=text], input:not([type]), input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--card); color: var(--text); }
-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 100vh; }
+.sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 32px 26px; background: var(--grad); color: #fff; display: flex; flex-direction: column; gap: 28px; }
+.sidebar::before { content: ""; position: fixed; width: 300px; height: 300px; left: -120px; bottom: -120px; border-radius: 50%; background: rgba(255,255,255,.07); pointer-events: none; }
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 17px; }
+.brand small { display: block; font-weight: 500; font-size: 12px; opacity: .75; }
+.logo { display: inline-flex; width: 42px; height: 42px; border-radius: 12px; align-items: center; justify-content: center; background: rgba(255,255,255,.16); box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+.stepper { list-style: none; margin: 0; padding: 0; position: relative; counter-reset: step; }
+.stepper li { counter-increment: step; }
+.step-dot::after { content: counter(step); }
+.stepper li { position: relative; display: flex; gap: 14px; padding: 0 0 22px; color: rgba(255,255,255,.65); }
+.stepper li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 30px; bottom: 2px; width: 2px; background: rgba(255,255,255,.2); border-radius: 2px; }
+.step-dot { position: relative; z-index: 1; flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); background: transparent; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; transition: all .25s; }
+.step-text strong { display: block; font-size: 14px; color: inherit; }
+.step-text small { font-size: 12px; opacity: .8; }
+.stepper li.current { color: #fff; }
+.stepper li.current .step-dot { background: #fff; border-color: #fff; box-shadow: 0 0 0 6px rgba(255,255,255,.18); }
+.stepper li.current .step-dot::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--p); }
+.stepper li.done { color: #fff; }
+.stepper li.done .step-dot { background: rgba(255,255,255,.95); border-color: transparent; color: var(--ok); }
+.stepper li.done .step-dot::after { content: "✓"; }
+.stepper li.done:not(:last-child)::after { background: rgba(255,255,255,.75); }
+.source { margin-top: auto; padding: 16px; border-radius: 14px; background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.source-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 700; }
+.source-url { opacity: .85; word-break: break-all; }
+.source-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.source-tags span { padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 11.5px; font-weight: 600; }
+.content { padding: 48px clamp(16px, 5vw, 64px); max-width: 920px; width: 100%; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 32px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 24px 48px -28px rgba(15,23,42,.25); animation: rise .35s ease; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.panel-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 24px; }
+.panel-head p { margin: 4px 0 0; }
+.panel-icon { flex: none; display: inline-flex; width: 48px; height: 48px; border-radius: 14px; align-items: center; justify-content: center; background: var(--p-soft); color: var(--p); }
+.panel-icon .ico { width: 24px; height: 24px; }
+.panel-icon.spin .ico { animation: bob 1.4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-3px); } }
+.eyebrow { display: block; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--p); margin-bottom: 2px; }
+.checks { width: 100%; border-collapse: separate; border-spacing: 0 6px; margin: 0; }
+.checks td { padding: 12px 14px; background: var(--bg); vertical-align: middle; }
+.checks td:first-child { width: 42%; font-weight: 600; border-radius: 12px 0 0 12px; }
+.checks td:last-child { border-radius: 0 12px 12px 0; }
+.checks tr.warn td { background: var(--warn-soft); } .checks tr.error td { background: var(--err-soft); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.warn { background: var(--warn-soft); color: var(--warn); } .pill.error { background: var(--err-soft); color: var(--err); }
+.help { font-size: 13px; color: var(--muted); margin-top: 6px; }
+label { display: block; font-weight: 600; font-size: 13.5px; margin-bottom: 6px; }
+input[type=text], input:not([type]), input[type=password] { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; font: inherit; background: var(--field); color: var(--text); transition: border-color .15s, box-shadow .15s; }
+input:focus { outline: none; border-color: var(--p); box-shadow: 0 0 0 4px rgba(79,70,229,.15); }
 input[readonly] { opacity: .7; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0 0 18px; }
 .grid .full { grid-column: 1 / -1; }
-.grid .check { display: flex; align-items: flex-end; } .grid .check label { font-weight: 400; display: flex; gap: 8px; align-items: center; }
-details { margin: 8px 0 16px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
-summary { cursor: pointer; font-weight: 600; }
-.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
-.btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
-.btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: var(--accent-d); }
-.btn:disabled { opacity: .55; cursor: not-allowed; }
-.msg { padding: 12px 14px; border-radius: 8px; margin: 12px 0; border-left: 4px solid var(--err); background: rgba(220,38,38,.08); }
-.msg.ok { border-color: var(--ok); background: rgba(22,163,74,.1); }
-.msg p { margin: 4px 0 0; }
+.grid .check { display: flex; align-items: flex-end; padding-bottom: 10px; }
+.toggle { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; margin: 0; }
+.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.toggle-ui { position: relative; width: 42px; height: 24px; border-radius: 999px; background: #cbd5e1; transition: background .2s; flex: none; }
+.toggle-ui::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+.toggle input:checked + .toggle-ui { background: var(--grad); }
+.toggle input:checked + .toggle-ui::after { transform: translateX(18px); }
+.toggle input:focus-visible + .toggle-ui { box-shadow: 0 0 0 4px rgba(79,70,229,.2); }
+.advanced { margin: 4px 0 18px; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: var(--bg); }
+.advanced summary { cursor: pointer; font-weight: 600; }
+.advanced .grid { margin: 14px 0 0; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.actions.end { justify-content: flex-end; } .actions.between { justify-content: space-between; } .actions.center { justify-content: center; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; transition: transform .12s, box-shadow .15s, border-color .15s; }
+.btn:hover { border-color: var(--p); }
+.btn.primary { background: var(--grad); border-color: transparent; color: #fff; box-shadow: 0 10px 22px -10px rgba(79,70,229,.8); }
+.btn.primary:hover { transform: translateY(-1px); box-shadow: 0 14px 28px -12px rgba(79,70,229,.9); }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+.msg { padding: 14px 16px; border-radius: 12px; margin: 14px 0; background: var(--err-soft); color: var(--err); border: 1px solid rgba(220,38,38,.25); }
+.msg.ok { background: var(--ok-soft); color: var(--ok); border-color: rgba(5,150,105,.25); }
+.msg strong { display: block; } .msg p { margin: 4px 0 0; color: var(--text); }
 .msg .btn { margin-top: 10px; }
-.bar { height: 14px; background: var(--line); border-radius: 7px; overflow: hidden; margin-top: 18px; }
-#bar-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #60a5fa); transition: width .4s ease; }
-.progress-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.log { background: #0f172a; color: #cbd5e1; font-size: 12px; padding: 10px 12px; border-radius: 8px; max-height: 170px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.progress-card { padding: 22px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); }
+.progress-top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+#pct { font-size: 40px; font-weight: 800; letter-spacing: -.03em; line-height: 1; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-variant-numeric: tabular-nums; }
+.bar { height: 14px; background: var(--line); border-radius: 999px; overflow: hidden; }
+#bar-fill { position: relative; height: 100%; width: 0; background: var(--grad); border-radius: 999px; transition: width .45s ease; overflow: hidden; }
+#bar-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); transform: translateX(-100%); animation: shine 1.6s infinite; }
+@keyframes shine { to { transform: translateX(100%); } }
+.log { background: #0b1020; color: #a5b4fc; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 14px 16px; border-radius: 14px; max-height: 190px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 16px 0 0; }
 .log:empty { display: none; }
-.success-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--ok); color: #fff; font-size: 30px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
-.notes { padding-left: 20px; } .notes li { margin-bottom: 6px; } .notes li.warn { color: var(--warn); }
-@media (max-width: 800px) { .layout { grid-template-columns: 1fr; margin: 16px auto; } .steps { position: static; } .steps ol { display: flex; flex-wrap: wrap; gap: 4px; } .steps li { font-size: 13px; padding: 6px 8px; } .source { display: none; } .grid { grid-template-columns: 1fr; } .card { padding: 20px; } }
+.panel.done { text-align: center; padding: 48px 32px; }
+.success-icon { width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 10px var(--ok-soft), 0 18px 36px -14px rgba(5,150,105,.8); animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
+.success-icon .ico { width: 38px; height: 38px; stroke-width: 2.5; }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+.lead { font-size: 17px; }
+.notes { list-style: none; padding: 0; margin: 22px auto 0; max-width: 620px; text-align: left; display: grid; gap: 8px; }
+.notes li { padding: 12px 14px 12px 40px; border-radius: 12px; background: var(--p-soft); position: relative; font-size: 14px; }
+.notes li::before { content: "i"; position: absolute; left: 14px; top: 13px; width: 18px; height: 18px; border-radius: 50%; background: var(--p); color: #fff; font-size: 11px; font-weight: 800; text-align: center; line-height: 18px; }
+.notes li.warn { background: var(--warn-soft); } .notes li.warn::before { content: "!"; background: var(--warn); }
+.solo { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: radial-gradient(1200px 600px at 10% -10%, rgba(124,58,237,.18), transparent), radial-gradient(900px 500px at 110% 110%, rgba(79,70,229,.18), transparent); }
+.solo-card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 36px 32px; text-align: center; box-shadow: 0 30px 60px -30px rgba(15,23,42,.35); }
+.solo-card form { text-align: left; margin-top: 22px; }
+.solo-card .btn { margin-top: 14px; }
+.solo-icon { display: inline-flex; width: 64px; height: 64px; border-radius: 18px; align-items: center; justify-content: center; background: var(--grad); color: #fff; margin-bottom: 16px; box-shadow: 0 14px 28px -14px rgba(79,70,229,.9); }
+.solo-icon .ico { width: 30px; height: 30px; }
+.solo-icon.error { background: linear-gradient(135deg, #f87171, #dc2626); } .solo-icon.ok { background: linear-gradient(135deg, #10b981, #059669); }
+.brand-foot { display: inline-flex; align-items: center; gap: 6px; margin: 22px 0 0; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.brand-foot .ico { width: 16px; height: 16px; }
+@media (max-width: 900px) {
+	.layout { grid-template-columns: 1fr; }
+	.sidebar { position: static; height: auto; padding: 20px 16px; gap: 16px; }
+	.sidebar::before, .source { display: none; }
+	.stepper { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+	.stepper li { padding: 0; flex: none; align-items: center; gap: 8px; }
+	.stepper li::after { display: none; }
+	.step-text small { display: none; }
+	.step-text strong { font-size: 12px; white-space: nowrap; }
+	.stepper li:not(.current) .step-text { display: none; }
+	.content { padding: 20px 16px 32px; }
+	.panel { padding: 22px 18px; border-radius: 16px; }
+	.panel-head { flex-direction: column; gap: 12px; }
+	.grid { grid-template-columns: 1fr; }
+	.checks td { display: block; border-radius: 0 !important; width: auto !important; }
+	.checks td:first-child { border-radius: 12px 12px 0 0 !important; padding-bottom: 4px; }
+	.checks td:last-child { border-radius: 0 0 12px 12px !important; padding-top: 4px; }
+	.actions .btn { width: 100%; }
+	#pct { font-size: 32px; }
+}
 </style>
 </head>
 <body>

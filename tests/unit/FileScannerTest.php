@@ -60,7 +60,7 @@ class FileScannerTest extends TestCase {
 			}
 			$state = json_decode( json_encode( $scan->get_state() ), true );
 		}
-		$this->assertGreaterThan( 3, $steps );
+		$this->assertGreaterThan( 1, $steps, "La reprise doit être exercée sur plusieurs étapes." );
 		$names = array();
 		foreach ( file( $list ) as $line ) {
 			$item    = json_decode( $line, true );

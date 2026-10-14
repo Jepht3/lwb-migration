@@ -124,6 +124,15 @@
 
 	Runner.prototype.update = function ( d ) {
 		var pct = Math.max( 0, Math.min( 100, Number( d.progress ) || 0 ) );
+		var chips = $all( '[data-lwbm-phase]', this.panel );
+		var order = chips.map( function ( c ) { return c.getAttribute( 'data-lwbm-phase' ); } );
+		var idx = 'done' === d.phase ? order.length : order.indexOf( d.phase );
+		if ( idx > -1 ) {
+			chips.forEach( function ( c, i ) {
+				c.classList.toggle( 'is-done', i < idx );
+				c.classList.toggle( 'is-current', i === idx );
+			} );
+		}
 		if ( d.label ) {
 			$( '[data-lwbm-label]', this.panel ).textContent = d.label;
 		}
@@ -219,7 +228,7 @@
 		this.setRetry( '' );
 		notice( message || __( 'Erreur inconnue.' ), solution );
 		if ( resumable ) {
-			var btn = el( 'button', { type: 'button', className: 'button button-primary', text: __( 'Reprendre' ) } );
+			var btn = el( 'button', { type: 'button', className: 'lwbm-btn lwbm-btn-primary', text: __( 'Reprendre' ) } );
 			btn.addEventListener( 'click', function () {
 				btn.remove();
 				notice( '' );
@@ -251,6 +260,10 @@
 	/* Onglet Exporter                                                     */
 	/* ------------------------------------------------------------------ */
 
+	function icon( name ) {
+		return el( 'span', { className: 'dashicons dashicons-' + name, 'aria-hidden': 'true' } );
+	}
+
 	function renderPackages( list ) {
 		var body = $( '#lwbm-packages-body' );
 		if ( ! body ) {
@@ -258,26 +271,26 @@
 		}
 		body.textContent = '';
 		if ( ! list.length ) {
-			body.appendChild( el( 'tr', {}, [ el( 'td', { colspan: '4', text: __( 'Aucun paquet pour le moment.' ) } ) ] ) );
+			body.appendChild( el( 'div', { className: 'lwbm-empty', text: __( 'Aucun paquet pour le moment. Cliquez sur « Exporter le site » pour en créer un.' ) } ) );
 			return;
 		}
 		list.forEach( function ( p ) {
-			var tags = [];
+			var badges = [];
 			if ( p.protected ) {
-				tags.push( el( 'span', { className: 'lwbm-tag is-lock', text: __( 'protégé' ) } ) );
+				badges.push( el( 'span', { className: 'lwbm-pill lwbm-pill-info' }, [ icon( 'lock' ), __( 'protégé' ) ] ) );
 			}
 			if ( p.direct ) {
-				tags.push( el( 'span', { className: 'lwbm-tag', text: __( 'migration directe' ) } ) );
+				badges.push( el( 'span', { className: 'lwbm-pill' }, [ __( 'migration directe' ) ] ) );
 			}
 			if ( p.warnings > 0 ) {
-				tags.push( el( 'span', { className: 'lwbm-tag is-warn', text: p.warnings + ' ' + __( 'avertissement(s)' ) } ) );
+				badges.push( el( 'span', { className: 'lwbm-pill lwbm-pill-warn' }, [ p.warnings + ' ' + __( 'avertissement(s)' ) ] ) );
 			}
-			var actions = el( 'div', { className: 'lwbm-pkg-actions' }, [
-				el( 'a', { className: 'button button-small', href: p.urls.archive, text: __( 'Archive' ) + ' (' + p.format + ')' } ),
-				el( 'a', { className: 'button button-small', href: p.urls.installer, text: 'installer.php' } ),
-				p.urls.log ? el( 'a', { className: 'button button-small', href: p.urls.log, text: __( 'Journal' ) } ) : null,
+			var actions = el( 'div', { className: 'lwbm-package-actions' }, [
+				el( 'a', { className: 'lwbm-btn lwbm-btn-soft lwbm-btn-sm', href: p.urls.archive }, [ icon( 'download' ), __( 'Archive' ) ] ),
+				el( 'a', { className: 'lwbm-btn lwbm-btn-ghost lwbm-btn-sm', href: p.urls.installer }, [ icon( 'media-code' ), 'installer.php' ] ),
+				p.urls.log ? el( 'a', { className: 'lwbm-btn lwbm-btn-ghost lwbm-btn-sm', href: p.urls.log, title: __( 'Journal' ) }, [ icon( 'media-text' ), __( 'Journal' ) ] ) : null,
 			] );
-			var del = el( 'button', { type: 'button', className: 'button button-small button-link-delete', text: __( 'Supprimer' ) } );
+			var del = el( 'button', { type: 'button', className: 'lwbm-btn lwbm-btn-danger lwbm-btn-sm lwbm-btn-icon', title: __( 'Supprimer' ), 'aria-label': __( 'Supprimer' ) }, [ icon( 'trash' ) ] );
 			del.addEventListener( 'click', function () {
 				if ( ! window.confirm( __( 'Supprimer définitivement ce paquet ?' ) ) ) {
 					return;
@@ -291,11 +304,18 @@
 				} );
 			} );
 			actions.appendChild( del );
-			body.appendChild( el( 'tr', {}, [
-				el( 'td', {}, [ el( 'strong', { text: p.date } ), el( 'br' ), el( 'code', { text: p.archive.substring( 0, 20 ) + '…' } ) ] ),
-				el( 'td', { text: p.size } ),
-				el( 'td', {}, [ p.files + ' ' + __( 'fichiers' ) + ', ' + p.tables + ' ' + __( 'tables' ) ].concat( tags ) ),
-				el( 'td', {}, [ actions ] ),
+			body.appendChild( el( 'article', { className: 'lwbm-package' }, [
+				el( 'span', { className: 'lwbm-package-icon', text: p.format } ),
+				el( 'div', { className: 'lwbm-package-main' }, [
+					el( 'div', { className: 'lwbm-package-title' }, [ p.date ].concat( badges ) ),
+					el( 'div', { className: 'lwbm-package-meta' }, [
+						el( 'span', {}, [ icon( 'database' ), p.size ] ),
+						el( 'span', {}, [ icon( 'media-default' ), p.files + ' ' + __( 'fichiers' ) ] ),
+						el( 'span', {}, [ icon( 'list-view' ), p.tables + ' ' + __( 'tables' ) ] ),
+						el( 'span', { title: p.archive }, [ icon( 'tag' ), p.archive.substring( 0, 16 ) + '…' ] ),
+					] ),
+				] ),
+				actions,
 			] ) );
 		} );
 	}
