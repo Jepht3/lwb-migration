@@ -24,7 +24,7 @@ preg_match( '/^Tested up to:\s*(\S+)/m', $readme, $tested );
 $version = $v[1];
 
 if ( '' !== $tag && ltrim( $tag, 'v' ) !== $version ) {
-	fwrite( STDERR, "Le tag $tag ne correspond pas à la version de l'extension ($version).\n" );
+	fwrite( STDERR, "::error::Le tag $tag ne correspond pas à la version de l'extension ($version).\n" );
 	exit( 1 );
 }
 
@@ -38,27 +38,33 @@ if ( preg_match( '/^= ' . preg_quote( $version, '/' ) . ' =\s*\n(.*?)(?=^= |\z)/
 	}
 }
 if ( empty( $changelog ) ) {
-	fwrite( STDERR, "Ajoutez la section « = $version = » au Changelog de readme.txt.\n" );
+	fwrite( STDERR, "::error::Ajoutez la section « = $version = » au Changelog de readme.txt.\n" );
 	exit( 1 );
 }
 
 $zip = $root . '/dist/lwb-migration.zip';
 if ( ! is_file( $zip ) ) {
-	fwrite( STDERR, "dist/lwb-migration.zip introuvable : lancez d'abord php bin/build.php.\n" );
+	fwrite( STDERR, "::error::dist/lwb-migration.zip introuvable : lancez d'abord php bin/build.php.\n" );
 	exit( 1 );
 }
 
 // Signature Ed25519 : graine de 32 octets (base64) dans le secret GitHub LWB_SIGNING_SEED.
-$seed = base64_decode( (string) getenv( 'LWB_SIGNING_SEED' ), true );
+// Tolère les erreurs de copie courantes : espaces, retours à la ligne, préfixe « LWB_SIGNING_SEED= ».
+$raw  = preg_replace( '/^\s*LWB_SIGNING_SEED\s*=\s*/', '', trim( (string) getenv( 'LWB_SIGNING_SEED' ) ) );
+$raw  = preg_replace( '/\s+/', '', $raw );
+$seed = '' === $raw ? false : base64_decode( $raw, true );
 if ( false === $seed || 32 !== strlen( $seed ) ) {
-	fwrite( STDERR, "Secret LWB_SIGNING_SEED absent ou invalide : impossible de signer la publication.\n" );
+	// « ::error:: » : message visible dans l'interface GitHub Actions (annotation).
+	fwrite( STDERR, '' === $raw
+		? "::error::Secret LWB_SIGNING_SEED absent : ajoutez-le dans Settings › Secrets and variables › Actions.\n"
+		: '::error::Secret LWB_SIGNING_SEED invalide (' . strlen( $raw ) . " caractères) : il doit contenir la graine Ed25519 en base64 (44 caractères).\n" );
 	exit( 1 );
 }
 $pair       = sodium_crypto_sign_seed_keypair( $seed );
 $public_b64 = base64_encode( sodium_crypto_sign_publickey( $pair ) );
 $updater    = file_get_contents( $root . '/includes/class-updater.php' );
 if ( ! preg_match( "/const PUBLIC_KEY = '([^']+)'/", $updater, $pk ) || $pk[1] !== $public_b64 ) {
-	fwrite( STDERR, "LWB_SIGNING_SEED ne correspond pas à Updater::PUBLIC_KEY : les sites refuseraient cette mise à jour.\n" );
+	fwrite( STDERR, "::error::LWB_SIGNING_SEED ne correspond pas à Updater::PUBLIC_KEY : les sites refuseraient cette mise à jour.\n" );
 	exit( 1 );
 }
 
