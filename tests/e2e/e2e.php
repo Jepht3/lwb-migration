@@ -50,12 +50,19 @@ function ok( $cond, $msg ) {
 	} else {
 		++$failures;
 		echo "  \033[31m✘ $msg\033[0m\n";
+		if ( getenv( 'GITHUB_ACTIONS' ) ) {
+			// Annotation : lisible dans l'interface GitHub sans ouvrir les journaux.
+			echo '::error::' . str_replace( array( "\r", "\n" ), ' ', $msg ) . "\n";
+		}
 	}
 	return $cond;
 }
 function fail( $msg ) {
 	global $servers;
 	echo "\n\033[31mÉCHEC : $msg\033[0m\n";
+	if ( getenv( 'GITHUB_ACTIONS' ) ) {
+		echo '::error::ÉCHEC : ' . substr( str_replace( array( "\r", "\n" ), ' ', $msg ), 0, 900 ) . "\n";
+	}
 	foreach ( $servers as $s ) {
 		proc_terminate( $s );
 	}

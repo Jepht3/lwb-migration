@@ -40,3 +40,34 @@ jobs:
       - name: Tests unitaires
         run: vendor/bin/phpunit
         timeout-minutes: 5
+
+  e2e:
+    name: Bout en bout (WordPress réel, PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.4']
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      LWB_E2E_DB_HOST: 127.0.0.1
+      LWB_E2E_DB_USER: root
+      LWB_E2E_DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, zip, zlib, curl, sodium, openssl
+          coverage: none
+      - name: Scénarios complets (export, installeur, migration directe, format LWB, mises à jour)
+        run: php tests/e2e/e2e.php
+        timeout-minutes: 25
