@@ -1,0 +1,5 @@
+/vendor/
+/dist/
+/.phpunit.result.cache
+/tests/e2e/.work/
+/tests/e2e/.wpcore/

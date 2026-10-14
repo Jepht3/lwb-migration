@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<ruleset name="Lwb Migration">
+	<description>WordPress Coding Standards + compatibilité PHP 7.4 à 8.4.</description>
+
+	<file>.</file>
+	<exclude-pattern>/vendor/*</exclude-pattern>
+	<exclude-pattern>/tests/*</exclude-pattern>
+	<exclude-pattern>/dist/*</exclude-pattern>
+	<exclude-pattern>/bin/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg value="sp"/>
+	<arg name="colors"/>
+
+	<config name="testVersion" value="7.4-"/>
+	<config name="minimum_wp_version" value="5.8"/>
+
+	<rule ref="WordPress"/>
+	<rule ref="PHPCompatibilityWP"/>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="lwb-migration"/>
+			</property>
+		</properties>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="lwb_migration"/>
+				<element value="LwbMigration"/>
+				<element value="lwbm"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Les messages d'exception ne sont jamais affichés en HTML : ils sont transmis en JSON puis
+	     insérés avec textContent (admin) ou échappés par h() (installeur). -->
+	<rule ref="WordPress.Security.EscapeOutput.ExceptionNotEscaped">
+		<severity>0</severity>
+	</rule>
+	<!-- Adaptateurs base de données : mysqli est l'objet même de ces classes (installeur hors WordPress,
+	     lecture non bufferisée sur la connexion de $wpdb). -->
+	<rule ref="WordPress.DB.RestrictedFunctions">
+		<exclude-pattern>/includes/class-(mysqli-db|wpdb-db|db)\.php</exclude-pattern>
+	</rule>
+
+	<!-- Les classes autonomes (aussi intégrées à installer.php) n'ont pas accès aux fonctions WordPress :
+	     fopen/fread/json_encode y sont indispensables (lecture en flux, sans WP_Filesystem). -->
+	<rule ref="WordPress.WP.AlternativeFunctions">
+		<exclude-pattern>/includes/class-(archiver|archive-reader|db-dumper|sql-importer|json-store|logger|file-scanner|job|runtime|search-replace|mysqli-db)\.php</exclude-pattern>
+		<exclude-pattern>/installer/*</exclude-pattern>
+	</rule>
+	<!-- Nom de fichier imposé par le cahier des charges. -->
+	<rule ref="WordPress.Files.FileName.InvalidClassFileName">
+		<exclude-pattern>/installer/*</exclude-pattern>
+	</rule>
+	<!-- L'installeur est un script HTML/JS autonome, hors WordPress. -->
+	<rule ref="WordPress.WP.EnqueuedResources">
+		<exclude-pattern>/installer/*</exclude-pattern>
+	</rule>
+</ruleset>

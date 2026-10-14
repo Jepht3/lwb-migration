@@ -1,0 +1,688 @@
+# Copyright (C) 2026 Lwb Migration
+# Ce fichier est distribué sous la même licence que l'extension Lwb Migration (GPL-2.0-or-later).
+# Langue source : français.
+msgid ""
+msgstr ""
+"Project-Id-Version: Lwb Migration 1.0.0\n"
+"Report-Msgid-Bugs-To: https://github.com/Jepht3/lwb-migration/issues\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-10-14 13:52+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"X-Domain: lwb-migration\n"
+
+#: admin/views/progress.php:12
+msgid "Préparation…"
+msgstr ""
+
+#: admin/views/progress.php:21
+msgid "Annuler"
+msgstr ""
+
+#: admin/views/tab-settings.php:15 admin/js/admin.js:276
+msgid "Archive"
+msgstr ""
+
+#: admin/views/tab-settings.php:18
+msgid "Format"
+msgstr ""
+
+#: admin/views/tab-settings.php:21
+msgid "Automatique (recommandé)"
+msgstr ""
+
+#: admin/views/tab-settings.php:22 includes/class-admin.php:150
+msgid "ZIP standard"
+msgstr ""
+
+#: admin/views/tab-settings.php:23
+msgid "LWB (repli en PHP pur, sans compression)"
+msgstr ""
+
+#: admin/views/tab-settings.php:25
+msgid "Automatique : ZIP si l’extension zip ou zlib est disponible, sinon LWB. Les deux formats sont lus par installer.php sans aucune extension particulière."
+msgstr ""
+
+#: admin/views/tab-settings.php:29
+msgid "Compression"
+msgstr ""
+
+#: admin/views/tab-settings.php:30
+msgid "Compresser les fichiers texte (les images, vidéos et archives sont stockées telles quelles)"
+msgstr ""
+
+#: admin/views/tab-settings.php:33
+msgid "Paquets conservés"
+msgstr ""
+
+#: admin/views/tab-settings.php:34
+msgid "Les plus anciens sont supprimés automatiquement."
+msgstr ""
+
+#: admin/views/tab-settings.php:38
+msgid "Fichiers"
+msgstr ""
+
+#: admin/views/tab-settings.php:41
+msgid "Exclusions par défaut"
+msgstr ""
+
+#: admin/views/tab-settings.php:43
+msgid "Exclure les caches, les sauvegardes d’autres extensions, node_modules, .git et les journaux d’erreurs"
+msgstr ""
+
+#: admin/views/tab-settings.php:44
+msgid "Le dossier de Lwb Migration et ses paquets sont toujours exclus."
+msgstr ""
+
+#: admin/views/tab-settings.php:48
+msgid "Dossiers exclus"
+msgstr ""
+
+#. translators: %s: chemin de la racine du site.
+#: admin/views/tab-settings.php:54
+#, php-format
+msgid "Un chemin par ligne, relatif à la racine du site (%s)."
+msgstr ""
+
+#: admin/views/tab-settings.php:60
+msgid "Extensions exclues"
+msgstr ""
+
+#: admin/views/tab-settings.php:64
+msgid "Taille maximale d’un fichier"
+msgstr ""
+
+#: admin/views/tab-settings.php:65
+msgid "(0 = aucune limite)"
+msgstr ""
+
+#: admin/views/tab-settings.php:69 includes/class-admin.php:144
+msgid "Base de données"
+msgstr ""
+
+#: admin/views/tab-settings.php:72
+msgid "Tables exportées"
+msgstr ""
+
+#: admin/views/tab-settings.php:74
+msgid "Inclure aussi les tables sans le préfixe WordPress"
+msgstr ""
+
+#: admin/views/tab-settings.php:78
+msgid "Tables exclues"
+msgstr ""
+
+#: admin/views/tab-settings.php:88
+msgid "Cochez les tables à ne pas migrer (journaux, statistiques volumineuses…). Les structures exclues ne seront pas recréées."
+msgstr ""
+
+#: admin/views/tab-settings.php:92
+msgid "Enregistrer les réglages"
+msgstr ""
+
+#: admin/views/tab-direct.php:14
+msgid "Transférez le site directement d’un serveur à l’autre, sans rien télécharger sur votre ordinateur. Lwb Migration doit être installée sur les deux sites."
+msgstr ""
+
+#: admin/views/tab-direct.php:18
+msgid "Sur le site de DESTINATION"
+msgstr ""
+
+#: admin/views/tab-direct.php:19
+msgid "Générez une clé de migration, puis copiez-la. Elle est valable 24 heures et ne sert qu’une fois."
+msgstr ""
+
+#: admin/views/tab-direct.php:21
+msgid "Ce site n’utilise pas HTTPS : la clé sera refusée par le site source. Activez un certificat SSL pour utiliser la migration directe."
+msgstr ""
+
+#: admin/views/tab-direct.php:23
+msgid "Attention : tout le contenu de ce site (fichiers et base de données) sera remplacé par celui du site source."
+msgstr ""
+
+#: admin/views/tab-direct.php:25
+msgid "Générer une clé de migration"
+msgstr ""
+
+#: admin/views/tab-direct.php:26
+msgid "Révoquer la clé"
+msgstr ""
+
+#: admin/views/tab-direct.php:29 admin/views/tab-direct.php:49
+msgid "Clé de migration"
+msgstr ""
+
+#: admin/views/tab-direct.php:32
+msgid "Copier la clé"
+msgstr ""
+
+#. translators: %s: date d'expiration.
+#: admin/views/tab-direct.php:40
+#, php-format
+msgid "Une clé est active jusqu’au %s."
+msgstr ""
+
+#: admin/views/tab-direct.php:47
+msgid "Sur le site SOURCE (celui-ci, à migrer)"
+msgstr ""
+
+#: admin/views/tab-direct.php:48
+msgid "Collez la clé générée sur le site de destination puis lancez la migration."
+msgstr ""
+
+#: admin/views/tab-direct.php:54
+msgid "Lancer la migration directe"
+msgstr ""
+
+#: admin/views/tab-direct.php:59
+msgid "Transfert terminé !"
+msgstr ""
+
+#: admin/views/tab-direct.php:60
+msgid "Dernière étape : ouvrez l’installeur sur le site de destination. Il se déroule automatiquement (import de la base, remplacement des URL, finalisation)."
+msgstr ""
+
+#: admin/views/tab-direct.php:61
+msgid "Ouvrir l’installeur sur la destination"
+msgstr ""
+
+#: admin/views/page.php:17 includes/class-admin.php:38 includes/class-admin.php:39
+msgid "Lwb Migration"
+msgstr ""
+
+#: admin/views/page.php:21
+msgid "Sections"
+msgstr ""
+
+#: admin/views/tab-export.php:14
+msgid "Créer un paquet de migration"
+msgstr ""
+
+#: admin/views/tab-export.php:16
+msgid "Le paquet contient une archive (fichiers + base de données) et un installer.php autonome. Déposez les deux fichiers à la racine du nouveau serveur, puis ouvrez votre-domaine/installer.php."
+msgstr ""
+
+#: admin/views/tab-export.php:20
+msgid "Mot de passe de l’installeur (recommandé)"
+msgstr ""
+
+#: admin/views/tab-export.php:23
+msgid "Générer"
+msgstr ""
+
+#: admin/views/tab-export.php:25
+msgid "Exigé à l’ouverture d’installer.php : empêche un tiers de lancer l’installation à votre place. Notez-le ! Laissez vide pour ne pas protéger (déconseillé)."
+msgstr ""
+
+#: admin/views/tab-export.php:31
+msgid "Exporter le site"
+msgstr ""
+
+#: admin/views/tab-export.php:38
+msgid "Paquet prêt !"
+msgstr ""
+
+#: admin/views/tab-export.php:39
+msgid "Téléchargez les deux fichiers puis envoyez-les (FTP, gestionnaire de fichiers) à la racine du site de destination."
+msgstr ""
+
+#: admin/views/tab-export.php:41
+msgid "Télécharger l’archive"
+msgstr ""
+
+#: admin/views/tab-export.php:42
+msgid "Télécharger installer.php"
+msgstr ""
+
+#: admin/views/tab-export.php:44
+msgid "Mot de passe de l’installeur :"
+msgstr ""
+
+#: admin/views/tab-export.php:49
+msgid "Environnement"
+msgstr ""
+
+#: admin/views/tab-export.php:58
+msgid "En 3 étapes"
+msgstr ""
+
+#: admin/views/tab-export.php:60
+msgid "Exportez et téléchargez l’archive + installer.php."
+msgstr ""
+
+#: admin/views/tab-export.php:61
+msgid "Envoyez-les à la racine du nouveau serveur (même vide)."
+msgstr ""
+
+#: admin/views/tab-export.php:62
+msgid "Ouvrez votre-domaine/installer.php et suivez l’assistant."
+msgstr ""
+
+#: admin/views/tab-export.php:68
+msgid "Paquets disponibles"
+msgstr ""
+
+#: admin/views/tab-export.php:72
+msgid "Date"
+msgstr ""
+
+#: admin/views/tab-export.php:73
+msgid "Taille"
+msgstr ""
+
+#: admin/views/tab-export.php:74
+msgid "Contenu"
+msgstr ""
+
+#: admin/views/tab-export.php:75
+msgid "Actions"
+msgstr ""
+
+#: admin/views/tab-export.php:79
+msgid "Chargement…"
+msgstr ""
+
+#: admin/js/admin.js:62
+msgid "Le serveur a renvoyé une réponse invalide"
+msgstr ""
+
+#: admin/js/admin.js:69
+msgid "Connexion au serveur perdue."
+msgstr ""
+
+#: admin/js/admin.js:88
+msgid "Solution :"
+msgstr ""
+
+#: admin/js/admin.js:121
+msgid "Durée :"
+msgstr ""
+
+#: admin/js/admin.js:160
+msgid "Le serveur termine l’étape précédente…"
+msgstr ""
+
+#: admin/js/admin.js:189
+msgid "Vérifiez votre connexion puis cliquez sur « Reprendre » : l’opération repartira du dernier point de sauvegarde."
+msgstr ""
+
+#: admin/js/admin.js:199
+msgid "Nouvelle tentative"
+msgstr ""
+
+#: admin/js/admin.js:199
+msgid "dans"
+msgstr ""
+
+#: admin/js/admin.js:220
+msgid "Erreur inconnue."
+msgstr ""
+
+#: admin/js/admin.js:222
+msgid "Reprendre"
+msgstr ""
+
+#: admin/js/admin.js:238
+msgid "Annuler l’opération en cours ?"
+msgstr ""
+
+#: admin/js/admin.js:261
+msgid "Aucun paquet pour le moment."
+msgstr ""
+
+#: admin/js/admin.js:267
+msgid "protégé"
+msgstr ""
+
+#: admin/js/admin.js:270
+msgid "migration directe"
+msgstr ""
+
+#: admin/js/admin.js:273
+msgid "avertissement(s)"
+msgstr ""
+
+#: admin/js/admin.js:278
+msgid "Journal"
+msgstr ""
+
+#: admin/js/admin.js:280
+msgid "Supprimer"
+msgstr ""
+
+#: admin/js/admin.js:282
+msgid "Supprimer définitivement ce paquet ?"
+msgstr ""
+
+#: admin/js/admin.js:297
+msgid "fichiers"
+msgstr ""
+
+#: admin/js/admin.js:297
+msgid "tables"
+msgstr ""
+
+#: admin/js/admin.js:347
+msgid "Le mot de passe doit contenir au moins 8 caractères."
+msgstr ""
+
+#: admin/js/admin.js:347
+msgid "Allongez-le, utilisez « Générer », ou laissez le champ vide."
+msgstr ""
+
+#: admin/js/admin.js:379 includes/class-ajax.php:42
+msgid "Rechargez la page et réessayez."
+msgstr ""
+
+#: admin/js/admin.js:398
+msgid "Générer une clé permettra à un autre site de REMPLACER entièrement ce site. Continuer ?"
+msgstr ""
+
+#: admin/js/admin.js:407
+msgid "Valable jusqu’au"
+msgstr ""
+
+#: admin/js/admin.js:425
+msgid "Clé copiée. Collez-la dans l’onglet « Migration directe » du site source."
+msgstr ""
+
+#: admin/js/admin.js:436
+msgid "Clé révoquée."
+msgstr ""
+
+#: admin/js/admin.js:447
+msgid "Collez d’abord la clé de migration."
+msgstr ""
+
+#: admin/js/admin.js:447
+msgid "Générez-la dans l’onglet « Migration directe » du site de destination."
+msgstr ""
+
+#: admin/js/admin.js:450
+msgid "Le site de destination sera entièrement remplacé par ce site. Continuer ?"
+msgstr ""
+
+#: includes/class-direct-transfer.php:113
+msgid "La clé de migration est invalide."
+msgstr ""
+
+#: includes/class-direct-transfer.php:114
+msgid "Copiez à nouveau la clé complète depuis l’onglet « Migration directe » du site de destination."
+msgstr ""
+
+#: includes/class-direct-transfer.php:131
+msgid "La clé de migration a expiré (validité : 24 h)."
+msgstr ""
+
+#: includes/class-direct-transfer.php:132
+msgid "Générez une nouvelle clé sur le site de destination."
+msgstr ""
+
+#: includes/class-direct-transfer.php:138
+msgid "Le site de destination n’utilise pas HTTPS : le transfert direct est refusé pour protéger vos données."
+msgstr ""
+
+#: includes/class-direct-transfer.php:139
+msgid "Activez un certificat SSL sur le site de destination (Let’s Encrypt est gratuit chez la plupart des hébergeurs), ou utilisez l’export classique (archive + installer.php)."
+msgstr ""
+
+#: includes/class-direct-transfer.php:144
+msgid "Cette clé appartient à ce site : impossible de migrer un site vers lui-même."
+msgstr ""
+
+#: includes/class-direct-transfer.php:145
+msgid "Générez la clé sur le site de destination, puis collez-la ici, sur le site source."
+msgstr ""
+
+#. translators: %s: erreur réseau.
+#: includes/class-direct-transfer.php:440
+#, php-format
+msgid "Le site de destination est injoignable : %s"
+msgstr ""
+
+#: includes/class-direct-transfer.php:441
+msgid "Vérifiez que le site de destination est en ligne et que son certificat SSL est valide. Le transfert reprendra automatiquement."
+msgstr ""
+
+#. translators: %d: code HTTP.
+#: includes/class-direct-transfer.php:449
+#, php-format
+msgid "Réponse inattendue du site de destination (HTTP %d)."
+msgstr ""
+
+#: includes/class-direct-transfer.php:451
+msgid "Le serveur de destination refuse les envois volumineux : augmentez post_max_size ou client_max_body_size (nginx)."
+msgstr ""
+
+#: includes/class-direct-transfer.php:452
+msgid "Vérifiez que Lwb Migration est activée sur le site de destination et qu’aucun pare-feu ne bloque admin-ajax.php."
+msgstr ""
+
+#: includes/class-direct-transfer.php:458
+msgid "Le site de destination a refusé la requête."
+msgstr ""
+
+#: includes/class-direct-transfer.php:477
+msgid "Les versions de Lwb Migration des deux sites sont incompatibles."
+msgstr ""
+
+#: includes/class-direct-transfer.php:478
+msgid "Mettez à jour l’extension sur les deux sites."
+msgstr ""
+
+#: includes/class-direct-transfer.php:505
+msgid "Archive introuvable pour le transfert."
+msgstr ""
+
+#: includes/class-direct-transfer.php:505
+msgid "Relancez la migration directe."
+msgstr ""
+
+#: includes/class-installer-builder.php:86
+msgid "Impossible d’écrire installer.php."
+msgstr ""
+
+#: includes/class-installer-builder.php:87
+msgid "Vérifiez les permissions d’écriture et l’espace disque."
+msgstr ""
+
+#: includes/class-ajax.php:58
+msgid "Le mot de passe de l’installeur est trop court."
+msgstr ""
+
+#: includes/class-ajax.php:59
+msgid "Utilisez au moins 8 caractères, ou laissez le champ vide."
+msgstr ""
+
+#: includes/class-ajax.php:90
+msgid "Cette opération est introuvable ou a expiré."
+msgstr ""
+
+#: includes/class-ajax.php:91
+msgid "Relancez l’export."
+msgstr ""
+
+#: includes/class-ajax.php:184
+msgid "Suppression impossible."
+msgstr ""
+
+#: includes/class-ajax.php:185 includes/class-exporter.php:366
+msgid "Vérifiez les permissions du dossier de stockage."
+msgstr ""
+
+#: includes/class-ajax.php:199 includes/class-admin.php:112
+msgid "Accès refusé."
+msgstr ""
+
+#: includes/class-ajax.php:207
+msgid "Fichier introuvable."
+msgstr ""
+
+#: includes/class-ajax.php:247
+msgid "Réglages enregistrés."
+msgstr ""
+
+#: includes/class-security.php:30
+msgid "Votre session a expiré (jeton de sécurité invalide)."
+msgstr ""
+
+#: includes/class-security.php:31
+msgid "Rechargez la page puis recommencez."
+msgstr ""
+
+#: includes/class-security.php:39
+msgid "Accès refusé : cette action est réservée aux administrateurs."
+msgstr ""
+
+#: includes/class-security.php:40
+msgid "Connectez-vous avec un compte administrateur."
+msgstr ""
+
+#: includes/class-security.php:63
+msgid "Le dossier des médias (uploads) est inaccessible."
+msgstr ""
+
+#: includes/class-security.php:64
+msgid "Vérifiez que wp-content/uploads existe et est accessible en écriture (permissions 755)."
+msgstr ""
+
+#: includes/class-admin.php:55 includes/class-admin.php:116
+msgid "Exporter"
+msgstr ""
+
+#: includes/class-admin.php:67
+msgid "Lwb Migration : migration terminée, les fichiers d’installation restants ont été supprimés."
+msgstr ""
+
+#: includes/class-admin.php:117
+msgid "Migration directe"
+msgstr ""
+
+#: includes/class-admin.php:118
+msgid "Paramètres"
+msgstr ""
+
+#: includes/class-admin.php:139
+msgid "Version de PHP"
+msgstr ""
+
+#: includes/class-admin.php:149
+msgid "Format d’archive"
+msgstr ""
+
+#: includes/class-admin.php:150
+msgid "LWB (repli sans compression)"
+msgstr ""
+
+#: includes/class-admin.php:154
+msgid "Durée d’une étape"
+msgstr ""
+
+#. translators: 1: budget en secondes, 2: max_execution_time.
+#: includes/class-admin.php:156
+#, php-format
+msgid "%1$s s (max_execution_time : %2$s)"
+msgstr ""
+
+#: includes/class-admin.php:156
+msgid "illimité"
+msgstr ""
+
+#: includes/class-admin.php:160
+msgid "Mémoire PHP"
+msgstr ""
+
+#: includes/class-exporter.php:38
+msgid "Le dossier de stockage n’est pas accessible en écriture."
+msgstr ""
+
+#: includes/class-exporter.php:39
+msgid "Donnez les permissions 755 au dossier wp-content/uploads."
+msgstr ""
+
+#: includes/class-exporter.php:133
+msgid "L’étape précédente est encore en cours sur le serveur…"
+msgstr ""
+
+#. translators: %s: message d'erreur technique.
+#: includes/class-exporter.php:182
+#, php-format
+msgid "Erreur inattendue : %s"
+msgstr ""
+
+#: includes/class-exporter.php:183
+msgid "Relancez l’opération ; elle reprendra au dernier point de sauvegarde. Si l’erreur persiste, téléchargez le journal et transmettez-le au support."
+msgstr ""
+
+#: includes/class-exporter.php:250
+msgid "Liste des fichiers introuvable."
+msgstr ""
+
+#: includes/class-exporter.php:250 includes/class-exporter.php:302
+msgid "Annulez cet export et relancez-le."
+msgstr ""
+
+#: includes/class-exporter.php:302
+msgid "Le dump SQL est introuvable."
+msgstr ""
+
+#: includes/class-exporter.php:366
+msgid "Impossible de déplacer l’archive dans le dossier des paquets."
+msgstr ""
+
+#: includes/class-exporter.php:512
+msgid "Inventaire des fichiers"
+msgstr ""
+
+#: includes/class-exporter.php:513
+msgid "Export de la base de données"
+msgstr ""
+
+#: includes/class-exporter.php:514
+msgid "Création de l’archive"
+msgstr ""
+
+#: includes/class-exporter.php:515
+msgid "Génération de l’installeur"
+msgstr ""
+
+#: includes/class-exporter.php:516
+msgid "Transfert vers le site de destination"
+msgstr ""
+
+#: includes/class-exporter.php:517
+msgid "Préparation du site de destination"
+msgstr ""
+
+#: includes/class-exporter.php:518
+msgid "Terminé"
+msgstr ""
+
+#. translators: 1: nombre de fichiers, 2: taille.
+#: includes/class-exporter.php:524
+#, php-format
+msgid "%1$s fichiers trouvés (%2$s)"
+msgstr ""
+
+#. translators: 1: table, 2: rang, 3: total, 4: lignes.
+#: includes/class-exporter.php:530
+#, php-format
+msgid "Table %1$s (%2$d/%3$d) – %4$s lignes exportées"
+msgstr ""
+
+#. translators: 1: fichiers traités, 2: total, 3: octets.
+#: includes/class-exporter.php:534
+#, php-format
+msgid "%1$s / %2$s fichiers archivés (%3$s)"
+msgstr ""
+
+#. translators: 1: envoyé, 2: total.
+#: includes/class-exporter.php:538
+#, php-format
+msgid "%1$s / %2$s envoyés"
+msgstr ""
+
