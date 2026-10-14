@@ -621,6 +621,25 @@ class Direct_Transfer {
 		$info = self::request( $remote, 'hello' );
 		// Destination capable de rétablir les corps brouillés (1.2.0+).
 		$remote['mask'] = ! empty( $info['mask'] ) ? 1 : 0;
+		// L'installeur est construit par l'extension de la destination : une version plus
+		// ancienne installerait le site sans les correctifs de cette version (ex. 1.2.2 :
+		// caches Elementor non vidés, liens vers l'ancien domaine, CSS introuvables).
+		$remote_version = isset( $info['plugin_version'] ) ? (string) $info['plugin_version'] : '';
+		if ( self::destination_outdated( $remote_version, LWB_MIGRATION_VERSION ) ) {
+			throw new Migration_Exception(
+				sprintf(
+					/* translators: 1: version de la destination, 2: version de ce site. */
+					__( 'Le site de destination utilise Lwb Migration %1$s, une version plus ancienne que celle de ce site (%2$s) : il installerait le site sans les derniers correctifs.', 'lwb-migration' ),
+					'' !== $remote_version ? $remote_version : '?',
+					LWB_MIGRATION_VERSION
+				),
+				sprintf(
+					/* translators: %s: version de ce site. */
+					__( 'Mettez à jour Lwb Migration sur le site de destination (Extensions › Mises à jour, ou bouton « Vérifier » de l’extension) vers la version %s ou plus récente, puis relancez la migration directe.', 'lwb-migration' ),
+					LWB_MIGRATION_VERSION
+				)
+			);
+		}
 		if ( Exporter::FORMAT_VERSION !== (int) $info['format_version'] ) {
 			throw new Migration_Exception(
 				__( 'Les versions de Lwb Migration des deux sites sont incompatibles.', 'lwb-migration' ),
@@ -628,6 +647,23 @@ class Direct_Transfer {
 			);
 		}
 		return $info;
+	}
+
+	/**
+	 * La destination a-t-elle une version de l'extension plus ancienne que la source ?
+	 *
+	 * Une version absente ou illisible est considérée comme ancienne.
+	 *
+	 * @param string $remote_version Version annoncée par la destination.
+	 * @param string $local_version  Version de ce site (source).
+	 * @return bool
+	 */
+	public static function destination_outdated( $remote_version, $local_version ) {
+		$remote_version = trim( (string) $remote_version );
+		if ( ! preg_match( '/^\d+(\.\d+)*([-+.][0-9A-Za-z.\-]+)?$/', $remote_version ) ) {
+			return true;
+		}
+		return version_compare( $remote_version, (string) $local_version, '<' );
 	}
 
 	/**

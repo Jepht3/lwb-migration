@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.2.3
+Stable tag: 1.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,9 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.2.4 =
+* Migration directe : le transfert est refusé si le site de destination a une version de Lwb Migration plus ancienne que le site source. C'est la destination qui construit l'installeur : une version ancienne installait le site sans les derniers correctifs (par exemple, avec la 1.2.2, les caches Elementor n'étaient pas vidés). Un message indique de mettre à jour l'extension sur la destination, puis de relancer
 
 = 1.2.3 =
 * Correction importante : sur les sites Elementor, le site migré pouvait garder des liens vers l'ancien domaine (cache de rendu d'Elementor 4, dont les réglages sont encodés en base64) et perdre sa mise en page (feuilles de style CSS référencées mais absentes). L'installeur vide désormais ces caches, comme « Elementor › Outils › Régénérer les fichiers et données » : tout est recréé à la première visite
