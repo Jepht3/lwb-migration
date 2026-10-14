@@ -167,6 +167,7 @@ class Direct_Transfer {
 		$offset = isset( $_GET['offset'] ) ? sanitize_text_field( wp_unslash( $_GET['offset'] ) ) : '0';
 		$extra  = isset( $_GET['x'] ) ? sanitize_text_field( wp_unslash( $_GET['x'] ) ) : '';
 		$sig    = isset( $_GET['sig'] ) ? sanitize_key( wp_unslash( $_GET['sig'] ) ) : '';
+		$masked = ! empty( $_GET['m'] );
 		// phpcs:enable
 
 		$data = get_option( self::OPTION );
@@ -183,9 +184,12 @@ class Direct_Transfer {
 			self::reply_error( 'Le transfert direct exige HTTPS.', 'Activez un certificat SSL sur le site de destination.', 403 );
 		}
 		$body     = (string) file_get_contents( 'php://input' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		$expected = Security::sign( $data['secret'], self::signature_base( $op, $kid, $ts, $nonce, $offset, $extra, $body ) );
+		$expected = Security::sign( $data['secret'], self::signature_base( $op, $kid, $ts, $nonce, $offset, $extra, $body, $masked ) );
 		if ( ! hash_equals( $expected, $sig ) ) {
 			self::reply_error( 'Signature invalide : la requête a été refusée.', 'Copiez à nouveau la clé de migration.', 403 );
+		}
+		if ( $masked ) {
+			$body = self::mask( $body, $data['secret'], $nonce );
 		}
 
 		try {
@@ -234,11 +238,45 @@ class Direct_Transfer {
 	 * @param string $nonce  Aléa.
 	 * @param string $offset Offset.
 	 * @param string $extra  Paramètre supplémentaire.
-	 * @param string $body   Corps.
+	 * @param string $body   Corps (tel que transmis).
+	 * @param bool   $masked Corps brouillé (voir mask()).
 	 * @return string
 	 */
-	private static function signature_base( $op, $kid, $ts, $nonce, $offset, $extra, $body ) {
-		return implode( "\n", array( 'lwb-migration', $op, $kid, (string) $ts, $nonce, (string) $offset, $extra, hash( 'sha256', $body ) ) );
+	private static function signature_base( $op, $kid, $ts, $nonce, $offset, $extra, $body, $masked = false ) {
+		$parts = array( 'lwb-migration', $op, $kid, (string) $ts, $nonce, (string) $offset, $extra, hash( 'sha256', $body ) );
+		if ( $masked ) {
+			$parts[] = 'm1';
+		}
+		return implode( "\n", $parts );
+	}
+
+	/**
+	 * Brouille (ou rétablit : l'opération est symétrique) un corps de requête.
+	 *
+	 * Les pare-feux d'hébergeurs (o2switch, Imunify360, ModSecurity…) inspectent le contenu
+	 * des requêtes et rejettent en 403 celles qui ressemblent à du code PHP malveillant :
+	 * une archive de site, qui contient des extensions entières, finit toujours par en
+	 * contenir. Le corps est donc combiné (XOR) à un flux dérivé du secret et de l'aléa de
+	 * la requête : il ne présente plus aucun motif reconnaissable. La confidentialité reste
+	 * assurée par HTTPS et l'intégrité par la signature HMAC.
+	 *
+	 * @param string $data   Données.
+	 * @param string $secret Secret partagé.
+	 * @param string $nonce  Aléa de la requête.
+	 * @return string
+	 */
+	public static function mask( $data, $secret, $nonce ) {
+		$len = strlen( $data );
+		if ( 0 === $len ) {
+			return $data;
+		}
+		$block = '';
+		$seed  = hash_hmac( 'sha256', 'mask|' . $nonce, $secret, true );
+		for ( $i = 0; $i < 256; $i++ ) {
+			$block .= hash_hmac( 'sha256', pack( 'N', $i ), $seed, true );
+		}
+		$stream = str_repeat( $block, (int) ceil( $len / 8192 ) );
+		return $data ^ substr( $stream, 0, $len );
 	}
 
 	/**
@@ -264,6 +302,7 @@ class Direct_Transfer {
 			'format_version' => Exporter::FORMAT_VERSION,
 			'chunk'          => max( self::MIN_CHUNK, $chunk ),
 			'zlib'           => function_exists( 'gzinflate' ),
+			'mask'           => 1,
 		);
 	}
 
@@ -460,13 +499,9 @@ class Direct_Transfer {
 		}
 		if ( ! is_array( $json ) ) {
 			if ( self::is_firewall_page( $code, $raw ) ) {
-				$ip = isset( $_SERVER['SERVER_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_ADDR'] ) ) : '';
 				throw new Migration_Exception(
-					sprintf( /* translators: %d: code HTTP. */ __( 'Le pare-feu anti-robot de l’hébergeur du site de destination bloque le transfert (HTTP %d).', 'lwb-migration' ), $code ),
-					'' !== $ip
-						/* translators: %s: adresse IP du serveur source. */
-						? sprintf( __( 'Autorisez l’adresse IP de ce serveur (%s) dans la protection anti-robot de l’hébergeur de destination (chez o2switch : cPanel › Outils o2switch › Sécurité), ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php).', 'lwb-migration' ), $ip )
-						: __( 'Autorisez ce serveur dans la protection anti-robot de l’hébergeur de destination, ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php).', 'lwb-migration' ),
+					sprintf( /* translators: %d: code HTTP. */ __( 'Le pare-feu de l’hébergeur du site de destination bloque le transfert (HTTP %d).', 'lwb-migration' ), $code ),
+					self::firewall_solution( $op, $remote ),
 					false
 				);
 			}
@@ -489,6 +524,29 @@ class Direct_Transfer {
 	}
 
 	/**
+	 * Conseil adapté quand un pare-feu bloque la requête.
+	 *
+	 * @param string $op     Opération.
+	 * @param array  $remote Informations de la clé.
+	 * @return string
+	 */
+	private static function firewall_solution( $op, array $remote ) {
+		if ( 'upload' === $op && empty( $remote['mask'] ) ) {
+			return __( 'Le pare-feu inspecte le contenu de l’archive. Mettez à jour Lwb Migration sur le site de destination (version 1.2.0 ou plus récente, qui rend les envois méconnaissables pour les pare-feux), puis cliquez sur Reprendre.', 'lwb-migration' );
+		}
+		$ip  = isset( $_SERVER['SERVER_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_ADDR'] ) ) : '';
+		$who = filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE )
+			/* translators: %s: adresse IP publique du serveur source. */
+			? sprintf( __( 'l’adresse IP de ce serveur (%s)', 'lwb-migration' ), $ip )
+			: __( 'l’adresse IP de ce serveur (indiquée dans cPanel › Informations générales)', 'lwb-migration' );
+		return sprintf(
+			/* translators: %s: adresse IP du serveur source. */
+			__( 'Autorisez %s dans la protection de l’hébergeur de destination (chez o2switch : cPanel › Outils o2switch › Sécurité), ou désactivez-la le temps de la migration, puis cliquez sur Reprendre. Vous pouvez aussi utiliser l’export classique (archive + installer.php).', 'lwb-migration' ),
+			$who
+		);
+	}
+
+	/**
 	 * Envoie une requête signée (nouvel horodatage et nouvel aléa à chaque essai).
 	 *
 	 * @param array  $remote Informations de la clé.
@@ -500,22 +558,27 @@ class Direct_Transfer {
 	 * @return array|\WP_Error
 	 */
 	private static function send( array $remote, $method, $op, $offset, $extra, $body ) {
-		$ts    = time();
-		$nonce = Runtime::random_hex( 16 );
-		$sig   = Security::sign( $remote['secret'], self::signature_base( $op, $remote['kid'], $ts, $nonce, $offset, $extra, $body ) );
-		$url   = add_query_arg(
-			array(
-				'action' => 'lwb_migration_receive',
-				'op'     => $op,
-				'kid'    => $remote['kid'],
-				'ts'     => $ts,
-				'n'      => $nonce,
-				'offset' => $offset,
-				'x'      => rawurlencode( $extra ),
-				'sig'    => $sig,
-			),
-			$remote['url']
+		$ts     = time();
+		$nonce  = Runtime::random_hex( 16 );
+		$masked = '' !== $body && ! empty( $remote['mask'] );
+		if ( $masked ) {
+			$body = self::mask( $body, $remote['secret'], $nonce );
+		}
+		$sig  = Security::sign( $remote['secret'], self::signature_base( $op, $remote['kid'], $ts, $nonce, $offset, $extra, $body, $masked ) );
+		$args = array(
+			'action' => 'lwb_migration_receive',
+			'op'     => $op,
+			'kid'    => $remote['kid'],
+			'ts'     => $ts,
+			'n'      => $nonce,
+			'offset' => $offset,
+			'x'      => rawurlencode( $extra ),
+			'sig'    => $sig,
 		);
+		if ( $masked ) {
+			$args['m'] = 1;
+		}
+		$url = add_query_arg( $args, $remote['url'] );
 		return wp_remote_request(
 			$url,
 			array(
@@ -544,7 +607,7 @@ class Direct_Transfer {
 		if ( ! in_array( $code, array( 403, 406, 409, 503 ), true ) ) {
 			return false;
 		}
-		return (bool) preg_match( '/security check|test de s[ée]curit[ée]|captcha|challenge|are you a (human|robot)|access denied|sucuri|imunify|wordfence|cloudflare|mod_security|not acceptable/i', $body );
+		return (bool) preg_match( '/security check|test de s[ée]curit[ée]|captcha|challenge|are you a (human|robot)|access denied|sucuri|imunify|wordfence|cloudflare|mod_security|not acceptable|forbidden/i', $body );
 	}
 
 	/**
@@ -556,6 +619,8 @@ class Direct_Transfer {
 	 */
 	public static function hello( array &$remote ) {
 		$info = self::request( $remote, 'hello' );
+		// Destination capable de rétablir les corps brouillés (1.2.0+).
+		$remote['mask'] = ! empty( $info['mask'] ) ? 1 : 0;
 		if ( Exporter::FORMAT_VERSION !== (int) $info['format_version'] ) {
 			throw new Migration_Exception(
 				__( 'Les versions de Lwb Migration des deux sites sont incompatibles.', 'lwb-migration' ),
@@ -576,6 +641,10 @@ class Direct_Transfer {
 	public static function send_step( Job $job, Runtime $rt ) {
 		$d       = &$job->data;
 		$archive = $d['package_dir'] . '/' . $d['archive_name'];
+		if ( ! isset( $d['direct']['mask'] ) ) {
+			// Tâche démarrée avec une version antérieure : on redemande les capacités de la destination.
+			self::hello( $d['direct'] );
+		}
 		if ( ! isset( $d['transfer'] ) ) {
 			$d['transfer'] = array(
 				'offset' => 0,

@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,11 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.2.0 =
+* Migration directe : les morceaux envoyés sont brouillés puis reconstitués à l'arrivée, pour que les pare-feux d'hébergeurs (o2switch, Imunify360, ModSecurity…) ne bloquent plus le transfert en 403 quand l'archive contient du code qu'ils jugent suspect
+* Reprise possible d'un transfert bloqué après mise à jour des deux sites (bouton Reprendre)
+* Messages d'erreur de pare-feu plus précis
 
 = 1.1.0 =
 * Migration directe compatible avec les pare-feux anti-robot des hébergeurs (o2switch PowerBoost, Imunify360…) : envoi en PUT avec repli automatique en POST

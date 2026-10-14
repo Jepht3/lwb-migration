@@ -441,6 +441,11 @@ $src_url  = 'http://127.0.0.1:8101/site';
 
 step( 'Site source : WordPress dans un sous-dossier, préfixe srcwp_' );
 install_wp( $src_abs, $src_url, 'lwb_e2e_src', 'srcwp_', 'Site Source LWB', "define( 'LWB_MIGRATION_ALLOW_HTTP', true );\n" );
+// Fichier stocké sans compression dans l'archive et contenant un motif que les pare-feux
+// d'hébergeurs bloquent (cas réel : 403 d'o2switch au milieu d'un transfert).
+define( 'E2E_SUSPECT', "\xFF\xD8\xFF\xE0<?php eval(base64_decode('ZWNobyAxOw==')); ?>" . str_repeat( 'x', 2048 ) );
+@mkdir( "$src_abs/wp-content/uploads/2020", 0755, true );
+file_put_contents( "$src_abs/wp-content/uploads/2020/suspect.jpg", E2E_SUSPECT );
 
 // Contenus piégés.
 $seed = <<<'PHP'
@@ -675,7 +680,8 @@ $b_root = E2E_WORK . '/siteb';
 install_wp( $b_root, 'http://localhost:8103', 'lwb_e2e_b', 'bwp_', 'Site B (sera remplacé)', "define( 'LWB_MIGRATION_ALLOW_HTTP', true );\n" );
 // Pare-feu « à la o2switch » : tout POST vers la réception reçoit un test anti-robot (503).
 $waf = E2E_WORK . '/waf-router.php';
-file_put_contents( $waf, '<?php if ( "POST" === $_SERVER["REQUEST_METHOD"] && false !== strpos( $_SERVER["REQUEST_URI"], "lwb_migration_receive" ) ) { http_response_code( 503 ); echo "<html><title>Test de sécurité / Security check</title>Please turn JavaScript on</html>"; return true; } return false;' );
+// Il inspecte aussi le contenu : un corps contenant « eval(base64_decode » reçoit un 403.
+file_put_contents( $waf, '<?php if ( "POST" === $_SERVER["REQUEST_METHOD"] && false !== strpos( $_SERVER["REQUEST_URI"], "lwb_migration_receive" ) ) { http_response_code( 503 ); echo "<html><title>Test de sécurité / Security check</title>Please turn JavaScript on</html>"; return true; } if ( false !== strpos( (string) file_get_contents( "php://input" ), "eval(base64_decode" ) ) { http_response_code( 403 ); echo "<html><title>403 Forbidden</title>Forbidden</html>"; return true; } return false;' );
 start_server( 8103, $b_root, 6, 'b', $waf );
 $b_url = 'http://localhost:8103';
 $b     = new Client( 'b' );
@@ -706,6 +712,7 @@ $bi = new Client( 'b-installer' );
 $bi->request( $d['installer_url'] ); // Pose le cookie et redirige.
 list( $api_b, $final_b ) = drive_installer( $bi, "$b_url/installer.php", array() );
 verify_site( 'direct', $b_url, $b_root, 'lwb_e2e_b', 'bwp_', $src_url, $src_abs );
+ok( E2E_SUSPECT === @file_get_contents( "$b_root/wp-content/uploads/2020/suspect.jpg" ), 'fichier bloqué par le pare-feu en clair transféré intact (corps brouillés)' );
 ok( false === get_option_b(), 'clé de migration consommée (usage unique)' );
 $api_b( 'cleanup' );
 

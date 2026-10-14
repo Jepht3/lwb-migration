@@ -3,12 +3,12 @@
 # Langue source : français.
 msgid ""
 msgstr ""
-"Project-Id-Version: Lwb Migration 1.0.0\n"
+"Project-Id-Version: Lwb Migration 1.2.0\n"
 "Report-Msgid-Bugs-To: https://github.com/Jepht3/lwb-migration/issues\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-14 16:02+0000\n"
+"POT-Creation-Date: 2026-10-14 16:45+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -521,70 +521,80 @@ msgid "Générez la clé sur le site de destination, puis collez-la ici, sur le 
 msgstr ""
 
 #. translators: %s: erreur réseau.
-#: includes/class-direct-transfer.php:427
+#: includes/class-direct-transfer.php:466
 #, php-format
 msgid "Le site de destination est injoignable : %s"
 msgstr ""
 
-#: includes/class-direct-transfer.php:428
+#: includes/class-direct-transfer.php:467
 msgid "Vérifiez que le site de destination est en ligne et que son certificat SSL est valide. Le transfert reprendra automatiquement."
 msgstr ""
 
-#: includes/class-direct-transfer.php:456
+#: includes/class-direct-transfer.php:495
 msgid "L’hébergeur du site de destination limite temporairement le nombre de requêtes (HTTP 429)."
 msgstr ""
 
-#: includes/class-direct-transfer.php:457
+#: includes/class-direct-transfer.php:496
 msgid "Rien à faire : le transfert ralentit sa cadence et reprend automatiquement."
 msgstr ""
 
 #. translators: %d: code HTTP.
-#: includes/class-direct-transfer.php:465
+#: includes/class-direct-transfer.php:503
 #, php-format
-msgid "Le pare-feu anti-robot de l’hébergeur du site de destination bloque le transfert (HTTP %d)."
-msgstr ""
-
-#. translators: %s: adresse IP du serveur source.
-#: includes/class-direct-transfer.php:468
-#, php-format
-msgid "Autorisez l’adresse IP de ce serveur (%s) dans la protection anti-robot de l’hébergeur de destination (chez o2switch : cPanel › Outils o2switch › Sécurité), ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php)."
-msgstr ""
-
-#: includes/class-direct-transfer.php:469
-msgid "Autorisez ce serveur dans la protection anti-robot de l’hébergeur de destination, ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php)."
+msgid "Le pare-feu de l’hébergeur du site de destination bloque le transfert (HTTP %d)."
 msgstr ""
 
 #. translators: %d: code HTTP.
-#: includes/class-direct-transfer.php:474
+#: includes/class-direct-transfer.php:509
 #, php-format
 msgid "Réponse inattendue du site de destination (HTTP %d)."
 msgstr ""
 
-#: includes/class-direct-transfer.php:476
+#: includes/class-direct-transfer.php:511
 msgid "Le serveur de destination refuse les envois volumineux : augmentez post_max_size ou client_max_body_size (nginx)."
 msgstr ""
 
-#: includes/class-direct-transfer.php:477
+#: includes/class-direct-transfer.php:512
 msgid "Vérifiez que Lwb Migration est activée sur le site de destination et qu’aucun pare-feu ne bloque admin-ajax.php."
 msgstr ""
 
-#: includes/class-direct-transfer.php:483
+#: includes/class-direct-transfer.php:518
 msgid "Le site de destination a refusé la requête."
 msgstr ""
 
-#: includes/class-direct-transfer.php:561
+#: includes/class-direct-transfer.php:535
+msgid "Le pare-feu inspecte le contenu de l’archive. Mettez à jour Lwb Migration sur le site de destination (version 1.2.0 ou plus récente, qui rend les envois méconnaissables pour les pare-feux), puis cliquez sur Reprendre."
+msgstr ""
+
+#. translators: %s: adresse IP publique du serveur source.
+#: includes/class-direct-transfer.php:540
+#, php-format
+msgid "l’adresse IP de ce serveur (%s)"
+msgstr ""
+
+#: includes/class-direct-transfer.php:541
+msgid "l’adresse IP de ce serveur (indiquée dans cPanel › Informations générales)"
+msgstr ""
+
+#. translators: %s: adresse IP du serveur source.
+#: includes/class-direct-transfer.php:544
+#, php-format
+msgid "Autorisez %s dans la protection de l’hébergeur de destination (chez o2switch : cPanel › Outils o2switch › Sécurité), ou désactivez-la le temps de la migration, puis cliquez sur Reprendre. Vous pouvez aussi utiliser l’export classique (archive + installer.php)."
+msgstr ""
+
+#: includes/class-direct-transfer.php:626
 msgid "Les versions de Lwb Migration des deux sites sont incompatibles."
 msgstr ""
 
-#: includes/class-direct-transfer.php:562
+#: includes/class-direct-transfer.php:627
 msgid "Mettez à jour l’extension sur les deux sites."
 msgstr ""
 
-#: includes/class-direct-transfer.php:589
+#: includes/class-direct-transfer.php:658
 msgid "Archive introuvable pour le transfert."
 msgstr ""
 
-#: includes/class-direct-transfer.php:589
+#: includes/class-direct-transfer.php:658
 msgid "Relancez la migration directe."
 msgstr ""
 
@@ -620,7 +630,7 @@ msgstr ""
 msgid "Vérifiez les permissions du dossier de stockage."
 msgstr ""
 
-#: includes/class-ajax.php:199 includes/class-updater.php:395 includes/class-admin.php:118
+#: includes/class-ajax.php:199 includes/class-updater.php:394 includes/class-admin.php:118
 msgid "Accès refusé."
 msgstr ""
 
@@ -642,10 +652,6 @@ msgstr ""
 
 #: includes/class-updater.php:383
 msgid "Vérifier les mises à jour"
-msgstr ""
-
-#: includes/class-updater.php:384
-msgid "Page de l’extension"
 msgstr ""
 
 #: includes/class-security.php:30
