@@ -689,13 +689,16 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 	// 4) Le site fonctionne.
 	$c    = new Client( "verify-$label" );
 	$home = $c->request( "$url/" );
-	ok( 200 === $home['code'] && false !== strpos( $home['body'], 'Site Source LWB' ), "$label : page d’accueil HTTP 200" );
+	ok( 200 === $home['code'] && false !== strpos( $home['body'], 'Site Source LWB' ), "$label : page d’accueil HTTP 200 (obtenu : HTTP {$home['code']})" ) || print( '    ' . substr( preg_replace( '/\s+/', ' ', strip_tags( $home['body'] ) ), 0, 400 ) . "\n" );
+	if ( 200 !== $home['code'] && getenv( 'GITHUB_ACTIONS' ) ) {
+		echo '::error::' . $label . ' : réponse de la page d’accueil : ' . substr( preg_replace( '/\s+/', ' ', strip_tags( (string) $home['body'] ) ), 0, 600 ) . "\n";
+	}
 	ok( false === strpos( $home['body'], '127.0.0.1:8101' ), "$label : aucune ancienne URL dans le HTML" );
 	$id   = scalar( $m, "SELECT ID FROM {$prefix}posts WHERE post_title = 'Article 3'" );
 	$post = $c->request( "$url/?p=$id" );
 	ok( 200 === $post['code'] && false !== strpos( $post['body'], "$url/wp-content/uploads/" ), "$label : article affiché avec les images à la nouvelle adresse" );
 	$img = $c->request( "$url/wp-content/uploads/" . date( 'Y/m' ) . '/photo-test.png' );
-	ok( 200 === $img['code'] && "\x89PNG" === substr( $img['body'], 0, 4 ), "$label : média servi" );
+	ok( 200 === $img['code'] && "\x89PNG" === substr( $img['body'], 0, 4 ), "$label : média servi (obtenu : HTTP {$img['code']})" );
 	ok( $c->wp_login( $url, 'admin', E2E_PASS ), "$label : connexion admin avec les identifiants du site source" );
 	$dash = $c->request( "$url/wp-admin/" );
 	ok( 200 === $dash['code'] && false !== strpos( $dash['body'], 'wp-admin-bar' ), "$label : tableau de bord accessible" );
@@ -759,6 +762,8 @@ list( $api_b, $final_b ) = drive_installer( $bi, "$b_url/installer.php", array()
 verify_site( 'direct', $b_url, $b_root, 'lwb_e2e_b', 'bwp_', $src_url, $src_abs );
 ok( E2E_SUSPECT === @file_get_contents( "$b_root/wp-content/uploads/2020/suspect.jpg" ), 'fichier bloqué par le pare-feu en clair transféré intact (corps brouillés)' );
 ok( false === get_option_b(), 'clé de migration consommée (usage unique)' );
+$reuse = ( new Client( 'b-reuse' ) )->request( $d['installer_url'] );
+ok( false !== strpos( $reuse['body'], 'déjà utilisé' ), 'lien de l’installeur refusé une fois l’installation faite (usage unique)' );
 $api_b( 'cleanup' );
 
 function get_option_b() {
@@ -918,6 +923,15 @@ ok( empty( $issues ), 'aucun avertissement PHP de l’extension ni de l’instal
 
 foreach ( $servers as $s ) {
 	proc_terminate( $s );
+}
+if ( $failures && getenv( 'GITHUB_ACTIONS' ) ) {
+	// Fin des journaux des serveurs, en annotations (les journaux complets exigent une connexion).
+	foreach ( array_merge( glob( E2E_WORK . '/server-*.out' ), glob( E2E_WORK . '/php-*.log' ) ) as $log ) {
+		$lines = array_filter( array_map( 'trim', array_slice( file( $log ), -6 ) ) );
+		if ( $lines ) {
+			echo '::warning title=' . basename( $log ) . '::' . substr( implode( ' ¶ ', $lines ), 0, 900 ) . "\n";
+		}
+	}
 }
 echo "\n" . ( $failures ? "\033[31m$failures échec(s)\033[0m" : "\033[32mToutes les vérifications ont réussi\033[0m" ) . " ($checks vérifications)\n";
 exit( $failures ? 1 : 0 );

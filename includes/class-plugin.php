@@ -77,6 +77,25 @@ class Plugin {
 			}
 		}
 		wp_delete_file( $marker );
+		self::drop_backup_tables();
 		set_transient( 'lwb_migration_cleaned', 1, 300 );
+	}
+
+	/**
+	 * Supprime les copies des tables de l'ancien site laissées par installer.php
+	 * (sauvegarde de la destination, préfixe lwbbk_) une fois la migration validée.
+	 *
+	 * @return void
+	 */
+	private static function drop_backup_tables() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- liste des tables, sans cache possible.
+		$tables = $wpdb->get_col( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( 'lwbbk_' ) . '%' ) );
+		foreach ( (array) $tables as $table ) {
+			if ( preg_match( '/^lwbbk_[A-Za-z0-9_$]+$/', (string) $table ) ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- nom de table validé ci-dessus.
+				$wpdb->query( 'DROP TABLE IF EXISTS `' . $table . '`' );
+			}
+		}
 	}
 }

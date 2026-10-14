@@ -37,6 +37,9 @@ class Installer {
 	const MAX_GLOBAL    = 100;
 	const DIRECT_TTL    = 86400;
 	const MANUAL_TTL    = 604800;
+	const TOKEN_GRACE   = 600;
+	const BACKUP_PREFIX = 'lwbbk_';
+	const BACKUP_CONFIG = array( 'wp-config.php', '.htaccess', '.user.ini', 'php.ini' );
 	const PHASES        = array( 'extract', 'import', 'replace', 'finalize' );
 	const DROPINS       = array( 'advanced-cache.php', 'object-cache.php' );
 	const SALT_KEYS     = array( 'AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT' );
@@ -164,7 +167,7 @@ class Installer {
 		$this->enforce_expiry();
 
 		// Installation terminée depuis plus d'une heure : on nettoie et on se retire.
-		if ( 'done' === $this->phase() && ! empty( $this->state['done_at'] ) && time() - $this->state['done_at'] > 3600 && ! $is_post ) {
+		if ( in_array( $this->phase(), array( 'done', 'restored' ), true ) && ! empty( $this->state['done_at'] ) && time() - $this->state['done_at'] > 3600 && ! $is_post ) {
 			$this->cleanup();
 			$this->fatal_page( 'Migration terminée.', 'Les fichiers d’installation ont été supprimés automatiquement.', 'ok' );
 		}
@@ -352,6 +355,21 @@ class Installer {
 	 */
 	private function login_with_token( $token ) {
 		if ( 'direct' === $this->config['mode'] && '' !== (string) $this->config['token_hash'] && hash_equals( (string) $this->config['token_hash'], hash( 'sha256', $token ) ) ) {
+			// Lien à usage unique : il peut traîner dans un journal du serveur ou un historique.
+			// Toléré pendant TOKEN_GRACE secondes après le premier usage (page rechargée,
+			// double clic), et jamais une fois l'installation commencée.
+			$first = isset( $this->state['token_used_at'] ) ? (int) $this->state['token_used_at'] : 0;
+			if ( 'setup' !== $this->phase() || ( $first > 0 && time() - $first > self::TOKEN_GRACE ) ) {
+				if ( $this->is_authenticated() ) {
+					header( 'Location: ' . $this->self, true, 302 );
+					exit;
+				}
+				$this->fatal_page( 'Lien d’installation déjà utilisé.', 'Par sécurité, ce lien ne fonctionne qu’une fois. Ouvrez l’installeur depuis le navigateur où vous avez cliqué sur le lien, ou relancez la migration directe depuis le site source.' );
+			}
+			if ( 0 === $first ) {
+				$this->state['token_used_at'] = time();
+				$this->save_state();
+			}
 			$this->set_auth_cookie();
 			header( 'Location: ' . $this->self, true, 302 );
 			exit;
@@ -497,6 +515,9 @@ class Installer {
 					break;
 				case 'plugin_toggle':
 					$this->json( $this->api_plugin_toggle() );
+					break;
+				case 'restore':
+					$this->json( $this->api_restore() );
 					break;
 			}
 		} catch ( Migration_Exception $e ) {
@@ -898,7 +919,14 @@ class Installer {
 			'errors'   => 0,
 			'started'  => time(),
 			'notes'    => array(),
+			'backup'   => array(
+				'config' => array(),
+				'files'  => 0,
+				'tables' => 0,
+			),
 		);
+		$this->save_state();
+		$this->backup_config_files();
 		$this->save_state();
 		$log = $this->log();
 		$log->info( sprintf( 'Installation démarrée – Lwb Migration %s, PHP %s.', $this->config['version'], PHP_VERSION ) );
@@ -1034,6 +1062,9 @@ class Installer {
 				$st['cursor'] = $st['next'];
 				continue;
 			}
+			if ( empty( $st['prog'] ) ) {
+				$this->backup_file( $dest ); // Fichier de la destination écrasé : mis de côté d'abord.
+			}
 			$prog       = $st['prog'];
 			$done       = $reader->extract( $entry, $dest, $prog, $rt );
 			$st['prog'] = $prog;
@@ -1083,6 +1114,8 @@ class Installer {
 			if ( $state['old_prefix'] !== $state['new_prefix'] ) {
 				$this->log()->info( sprintf( 'Changement de préfixe : %s → %s.', $state['old_prefix'], $state['new_prefix'] ) );
 			}
+			// Juste avant l'import : les tables qui vont être remplacées sont mises de côté.
+			$this->backup_tables( $db, $state['old_prefix'], $state['new_prefix'] );
 		}
 		$self                  = $this;
 		$importer              = new Sql_Importer(
@@ -1445,6 +1478,7 @@ class Installer {
 		}
 		$list = array_merge( isset( $out['plugins'] ) ? $out['plugins'] : array(), isset( $out['themes'] ) ? $out['themes'] : array() );
 		$this->log()->info( 'Mis de côté (absents du site source) : ' . implode( ', ', $list ) . '.' );
+		$this->state['quarantine_dir'] = $base;
 		$this->state['notes'][] = sprintf(
 			'%d extension(s) et %d thème(s) absents du site source (restes de l’ancienne installation) ont été mis de côté dans wp-content/%s/ : %s. Supprimez ce dossier après vérification.',
 			isset( $out['plugins'] ) ? count( $out['plugins'] ) : 0,
@@ -1690,10 +1724,10 @@ class Installer {
 	 * @throws Migration_Exception Installation non terminée.
 	 */
 	private function api_cleanup() {
-		if ( 'done' !== $this->phase() ) {
+		if ( ! in_array( $this->phase(), array( 'done', 'restored' ), true ) ) {
 			throw new Migration_Exception( 'L’installation n’est pas terminée.', 'Terminez l’installation avant de supprimer les fichiers.' );
 		}
-		$admin = rtrim( $this->state['target']['site_url'], '/' ) . '/wp-admin/';
+		$admin = 'restored' === $this->phase() ? $this->script_dir() . '/' : rtrim( $this->state['target']['site_url'], '/' ) . '/wp-admin/';
 		$this->cleanup();
 		return array(
 			'ok'       => true,
@@ -1765,12 +1799,362 @@ class Installer {
 		);
 	}
 
+	// ------------------------------------------------------------------
+	// Sauvegarde et restauration de la destination.
+	// ------------------------------------------------------------------
+
+	/**
+	 * Dossier de sauvegarde de la destination (dans le dossier de travail protégé).
+	 *
+	 * @return string
+	 */
+	private function backup_dir() {
+		return $this->data_dir . '/backup';
+	}
+
+	/**
+	 * Nom de la copie de sauvegarde d'une table (64 caractères au plus).
+	 *
+	 * @param string $table Table.
+	 * @return string
+	 */
+	public static function backup_table_name( $table ) {
+		$name = self::BACKUP_PREFIX . $table;
+		if ( strlen( $name ) > 64 ) {
+			$name = self::BACKUP_PREFIX . substr( sha1( $table ), 0, 10 ) . '_' . substr( $table, -( 64 - strlen( self::BACKUP_PREFIX ) - 11 ) );
+		}
+		return $name;
+	}
+
+	/**
+	 * Copie wp-config.php, .htaccess, .user.ini et php.ini de la destination.
+	 *
+	 * Copies enregistrées en .php précédé d'un exit : jamais lisibles depuis le web, même
+	 * sur un serveur qui ignore .htaccess.
+	 *
+	 * @return void
+	 */
+	private function backup_config_files() {
+		$saved = array();
+		foreach ( self::BACKUP_CONFIG as $name ) {
+			$file = $this->root . '/' . $name;
+			if ( ! is_file( $file ) ) {
+				continue;
+			}
+			Json_Store::ensure_protected_dir( $this->backup_dir() );
+			Json_Store::ensure_protected_dir( $this->backup_dir() . '/config' );
+			$content = @file_get_contents( $file );
+			if ( false !== $content && false !== @file_put_contents( $this->backup_dir() . '/config/' . $name . '.php', Json_Store::HEADER . $content ) ) {
+				$saved[] = $name;
+			}
+		}
+		$this->state['backup']['config'] = $saved;
+		if ( ! empty( $saved ) ) {
+			$this->log()->info( 'Sauvegarde de la destination : ' . implode( ', ', $saved ) . ' copiés.' );
+		}
+	}
+
+	/**
+	 * Met de côté un fichier de la destination que l'extraction va écraser.
+	 *
+	 * Simple déplacement (même disque) : instantané, sans espace supplémentaire.
+	 *
+	 * @param string $dest Fichier qui va être écrit.
+	 * @return void
+	 */
+	private function backup_file( $dest ) {
+		$root = $this->root . '/';
+		if ( 0 !== strpos( $dest, $root ) || 0 === strpos( $dest, $this->data_dir . '/' ) || ! is_file( $dest ) || is_link( $dest ) ) {
+			return;
+		}
+		$target = $this->backup_dir() . '/files/' . substr( $dest, strlen( $root ) );
+		if ( file_exists( $target ) ) {
+			return; // Déjà mis de côté (étape reprise après une coupure).
+		}
+		Json_Store::ensure_protected_dir( $this->backup_dir() );
+		if ( ( is_dir( dirname( $target ) ) || @mkdir( dirname( $target ), 0755, true ) ) && @rename( $dest, $target ) ) {
+			$this->state['backup']['files'] = ( isset( $this->state['backup']['files'] ) ? (int) $this->state['backup']['files'] : 0 ) + 1;
+			return;
+		}
+		if ( empty( $this->state['backup']['file_error'] ) ) {
+			$this->state['backup']['file_error'] = 1;
+			$this->log()->warning( 'Sauvegarde : impossible de mettre de côté certains fichiers de la destination (ex. ' . substr( $dest, strlen( $root ) ) . ') : ils seront écrasés.' );
+			++$this->state['warnings'];
+		}
+	}
+
+	/**
+	 * Renomme les tables de la destination qui vont être remplacées par l'import.
+	 *
+	 * @param Db     $db  Connexion.
+	 * @param string $old Préfixe du site source.
+	 * @param string $new Préfixe de la destination.
+	 * @return void
+	 */
+	private function backup_tables( Db $db, $old, $new ) {
+		$pkg      = json_decode( (string) @file_get_contents( $this->data_dir . '/package.json' ), true );
+		$tables   = is_array( $pkg ) && isset( $pkg['tables'] ) && is_array( $pkg['tables'] ) ? $pkg['tables'] : array();
+		$existing = array_flip( $db->list_tables() );
+		$map_file = $this->backup_dir() . '/tables.php';
+		$map      = Json_Store::read( $map_file );
+		$map      = is_array( $map ) ? $map : array();
+		foreach ( $tables as $table ) {
+			$target = self::target_table( (string) $table, $old, $new );
+			if ( isset( $map[ $target ] ) || ! isset( $existing[ $target ] ) ) {
+				continue;
+			}
+			$bak = self::backup_table_name( $target );
+			if ( isset( $existing[ $bak ] ) ) {
+				$db->query( 'DROP TABLE ' . Db::ident( $bak ) ); // Sauvegarde d'une migration précédente.
+			}
+			if ( ! $db->query( 'RENAME TABLE ' . Db::ident( $target ) . ' TO ' . Db::ident( $bak ) ) ) {
+				$this->log()->warning( sprintf( 'Sauvegarde : table %s non mise de côté (%s) : elle sera remplacée.', $target, $db->last_error() ) );
+				++$this->state['warnings'];
+				continue;
+			}
+			$map[ $target ] = $bak;
+			Json_Store::ensure_protected_dir( $this->backup_dir() );
+			Json_Store::write( $map_file, $map );
+		}
+		$this->state['backup']['tables'] = count( $map );
+		if ( ! empty( $map ) ) {
+			$this->log()->info( sprintf( 'Sauvegarde de la destination : %d table(s) existante(s) renommée(s) avec le préfixe %s.', count( $map ), self::BACKUP_PREFIX ) );
+		}
+	}
+
+	/**
+	 * Nom d'une table du site source sur la destination (changement de préfixe).
+	 *
+	 * @param string $table Table du site source.
+	 * @param string $old   Préfixe du site source.
+	 * @param string $new   Préfixe de la destination.
+	 * @return string
+	 */
+	private static function target_table( $table, $old, $new ) {
+		return ( '' !== $old && 0 === strpos( $table, $old ) ) ? $new . substr( $table, strlen( $old ) ) : $table;
+	}
+
+	/**
+	 * Une sauvegarde de la destination existe-t-elle ?
+	 *
+	 * @return bool
+	 */
+	private function has_backup() {
+		$b = isset( $this->state['backup'] ) ? $this->state['backup'] : array();
+		return ! empty( $b['config'] ) || ! empty( $b['files'] ) || ! empty( $b['tables'] );
+	}
+
+	/**
+	 * Restaure la destination telle qu'elle était avant l'installation (par étapes).
+	 *
+	 * @return array
+	 * @throws Migration_Exception Rien à restaurer.
+	 */
+	private function api_restore() {
+		if ( in_array( $this->phase(), array( 'setup', 'restored' ), true ) || ! $this->has_backup() ) {
+			throw new Migration_Exception( 'Aucune sauvegarde à restaurer.', '' );
+		}
+		$lock = @fopen( $this->data_dir . '/lock', 'c' );
+		if ( $lock && ! flock( $lock, LOCK_EX | LOCK_NB ) ) {
+			return array(
+				'ok'     => true,
+				'phase'  => $this->phase(),
+				'detail' => 'Le serveur termine l’étape en cours…',
+			);
+		}
+		Runtime::prepare();
+		$rt = new Runtime();
+		try {
+			if ( 'restoring' !== $this->phase() ) {
+				$this->state['phase']   = 'restoring';
+				$this->state['restore'] = array(
+					'db'    => false,
+					'files' => false,
+				);
+				$this->save_state();
+				$this->log()->info( 'Restauration de la destination demandée.' );
+			}
+			if ( ! $this->state['restore']['db'] ) {
+				$this->restore_tables();
+				$this->state['restore']['db'] = true;
+				$this->save_state();
+			}
+			if ( ! $this->state['restore']['files'] && $this->restore_files( $rt ) ) {
+				$this->state['restore']['files'] = true;
+				$this->restore_config();
+				$this->restore_side_effects();
+				$this->state['phase']   = 'restored';
+				$this->state['done_at'] = time();
+				$this->log()->info( 'Destination restaurée telle qu’elle était avant l’installation.' );
+			}
+			$this->save_state();
+		} finally {
+			if ( $lock ) {
+				flock( $lock, LOCK_UN );
+				fclose( $lock );
+			}
+		}
+		return array(
+			'ok'     => true,
+			'phase'  => $this->phase(),
+			'detail' => 'restored' === $this->phase() ? '' : 'Remise en place des fichiers…',
+		);
+	}
+
+	/**
+	 * Supprime les tables importées et remet les tables d'origine.
+	 *
+	 * @return void
+	 */
+	private function restore_tables() {
+		if ( empty( $this->state['db'] ) ) {
+			return;
+		}
+		$map      = Json_Store::read( $this->backup_dir() . '/tables.php' );
+		$map      = is_array( $map ) ? $map : array();
+		$db       = $this->db();
+		$existing = array_flip( $db->list_tables() );
+		$pkg      = json_decode( (string) @file_get_contents( $this->data_dir . '/package.json' ), true );
+		$created  = isset( $this->state['import']['tables'] ) && is_array( $this->state['import']['tables'] ) ? $this->state['import']['tables'] : array();
+		$old      = isset( $this->state['import']['old_prefix'] ) ? (string) $this->state['import']['old_prefix'] : (string) $this->config['source']['table_prefix'];
+		$new      = (string) $this->state['db']['prefix'];
+		foreach ( is_array( $pkg ) && isset( $pkg['tables'] ) && is_array( $pkg['tables'] ) ? $pkg['tables'] : array() as $table ) {
+			$created[] = self::target_table( (string) $table, $old, $new );
+		}
+		foreach ( array_unique( $created ) as $table ) {
+			if ( ! isset( $map[ $table ] ) && isset( $existing[ $table ] ) ) {
+				$db->query( 'DROP TABLE ' . Db::ident( $table ) ); // Créée par l'import : n'existait pas avant.
+			}
+		}
+		foreach ( $map as $table => $bak ) {
+			if ( isset( $existing[ $bak ] ) ) {
+				$db->query( 'DROP TABLE IF EXISTS ' . Db::ident( $table ) );
+				if ( ! $db->query( 'RENAME TABLE ' . Db::ident( $bak ) . ' TO ' . Db::ident( $table ) ) ) {
+					$this->log()->warning( sprintf( 'Restauration : table %s non rétablie (%s). Sa copie reste disponible sous le nom %s.', $table, $db->last_error(), $bak ) );
+				}
+			}
+		}
+		$db->close();
+		$this->log()->info( sprintf( 'Restauration : %d table(s) d’origine rétablie(s).', count( $map ) ) );
+	}
+
+	/**
+	 * Remet en place les fichiers mis de côté (reprend là où il s'était arrêté).
+	 *
+	 * @param Runtime $rt Budget.
+	 * @return bool true si tous les fichiers ont été traités.
+	 */
+	private function restore_files( Runtime $rt ) {
+		$base = $this->backup_dir() . '/files';
+		if ( ! is_dir( $base ) ) {
+			return true;
+		}
+		$items = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $base, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
+		foreach ( $items as $item ) {
+			$path = str_replace( '\\', '/', $item->getPathname() );
+			if ( $item->isDir() ) {
+				@rmdir( $path );
+				continue;
+			}
+			$dest = $this->root . '/' . substr( $path, strlen( $base ) + 1 );
+			if ( ! is_dir( dirname( $dest ) ) ) {
+				@mkdir( dirname( $dest ), 0755, true );
+			}
+			if ( is_file( $dest ) ) {
+				@unlink( $dest );
+			}
+			if ( ! @rename( $path, $dest ) ) {
+				$this->log()->warning( 'Restauration : fichier non remis en place : ' . substr( $path, strlen( $base ) + 1 ) );
+			}
+			if ( $rt->should_stop() ) {
+				return false;
+			}
+		}
+		@rmdir( $base );
+		return true;
+	}
+
+	/**
+	 * Remet wp-config.php, .htaccess, .user.ini et php.ini d'origine.
+	 *
+	 * @return void
+	 */
+	private function restore_config() {
+		$saved = isset( $this->state['backup']['config'] ) ? (array) $this->state['backup']['config'] : array();
+		foreach ( $saved as $name ) {
+			if ( ! in_array( $name, self::BACKUP_CONFIG, true ) ) {
+				continue;
+			}
+			$raw = @file_get_contents( $this->backup_dir() . '/config/' . $name . '.php' );
+			if ( false === $raw ) {
+				continue;
+			}
+			if ( 0 === strpos( $raw, Json_Store::HEADER ) ) {
+				$raw = substr( $raw, strlen( Json_Store::HEADER ) );
+			}
+			@file_put_contents( $this->root . '/' . $name, $raw );
+		}
+		@unlink( $this->root . '/.htaccess.lwb-original' );
+	}
+
+	/**
+	 * Annule les autres changements : drop-ins de cache, extensions et thèmes mis de côté.
+	 *
+	 * @return void
+	 */
+	private function restore_side_effects() {
+		foreach ( self::DROPINS as $dropin ) {
+			$file = $this->root . '/wp-content/' . $dropin;
+			if ( is_file( $file . '.lwb-disabled' ) && ! is_file( $file ) ) {
+				@rename( $file . '.lwb-disabled', $file );
+			}
+		}
+		$dir = isset( $this->state['quarantine_dir'] ) ? (string) $this->state['quarantine_dir'] : '';
+		if ( '' === $dir || ! is_dir( $dir ) ) {
+			return;
+		}
+		foreach ( array( 'plugins', 'themes' ) as $type ) {
+			$items = is_dir( $dir . '/' . $type ) ? @scandir( $dir . '/' . $type ) : false;
+			foreach ( is_array( $items ) ? $items : array() as $item ) {
+				if ( '.' === $item[0] || 'index.php' === $item || 'web.config' === $item ) {
+					continue;
+				}
+				if ( ! file_exists( $this->root . '/wp-content/' . $type . '/' . $item ) ) {
+					@rename( $dir . '/' . $type . '/' . $item, $this->root . '/wp-content/' . $type . '/' . $item );
+				}
+			}
+		}
+		Json_Store::delete_dir( $dir );
+	}
+
+	/**
+	 * Supprime les copies de sauvegarde des tables (installation validée).
+	 *
+	 * @return void
+	 */
+	private function drop_backup_tables() {
+		$map = Json_Store::read( $this->backup_dir() . '/tables.php' );
+		if ( empty( $map ) || empty( $this->state['db'] ) ) {
+			return;
+		}
+		try {
+			$db = $this->db();
+			foreach ( $map as $bak ) {
+				$db->query( 'DROP TABLE IF EXISTS ' . Db::ident( (string) $bak ) );
+			}
+			$db->close();
+		} catch ( \Throwable $e ) {
+			unset( $e ); // Copies laissées en place : l'extension les supprime à la première visite de l'administration.
+		}
+	}
+
 	/**
 	 * Supprime installeur, archive, dossier de travail et marqueur.
 	 *
 	 * @return void
 	 */
 	private function cleanup() {
+		$this->drop_backup_tables();
 		@unlink( $this->archive_path() );
 		Json_Store::delete_dir( $this->data_dir );
 		@unlink( $this->root . '/' . self::DONE_MARKER );
@@ -1818,7 +2202,11 @@ class Installer {
 				$pct = 98;
 				break;
 			case 'done':
+			case 'restored':
 				$pct = 100;
+				break;
+			case 'restoring':
+				$detail = 'Remise en place de l’ancien site…';
 				break;
 		}
 		$out = array(
@@ -1829,6 +2217,7 @@ class Installer {
 		if ( 'setup' !== $phase && is_dir( $this->data_dir ) ) {
 			$out['log'] = $this->log()->tail( 6 );
 		}
+		$out['backup'] = ! in_array( $phase, array( 'setup', 'restored' ), true ) && $this->has_backup();
 		if ( 'done' === $phase ) {
 			$old = array();
 			foreach ( array( $this->config['source']['site_url'], $this->config['source']['home_url'] ) as $url ) {
@@ -2066,8 +2455,17 @@ class Installer {
 					<div class="actions center">
 						<button type="button" class="btn primary" id="cleanup">Supprimer les fichiers d’installation et ouvrir l’administration</button>
 						<a class="btn" href="?lwb_log=1">Télécharger le journal</a>
+							<button type="button" class="btn" id="restore" hidden>Annuler : restaurer l’ancien site</button>
 					</div>
-					<p class="muted small">Par sécurité, l’installeur et son dossier de travail sont supprimés automatiquement une heure après la fin de l’installation.</p>
+					<p class="muted small">Par sécurité, l’installeur et son dossier de travail sont supprimés automatiquement une heure après la fin de l’installation, avec la sauvegarde de l’ancien site.</p>
+				</section>
+
+				<section id="panel-restored" class="panel done" hidden>
+					<div class="success-icon"><?php echo self::icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+					<h1>Ancien site restauré</h1>
+					<p class="lead">La base de données, les fichiers et la configuration sont revenus à leur état d’avant l’installation.</p>
+					<p class="muted">Les fichiers ajoutés par l’archive qui n’existaient pas avant sont restés en place.</p>
+					<div class="actions center"><button type="button" class="btn primary" id="cleanup-restored">Supprimer les fichiers d’installation</button></div>
 				</section>
 			</main>
 		</div>
@@ -2089,7 +2487,7 @@ class Installer {
 	var B = window.LWB, MAX_RETRIES = 8, retries = 0;
 	function $(id) { return document.getElementById(id); }
 	function show(panel) {
-		['check', 'db', 'run', 'done'].forEach(function (p) { $('panel-' + p).hidden = p !== panel; });
+		['check', 'db', 'run', 'done', 'restored'].forEach(function (p) { $('panel-' + p).hidden = p !== panel; });
 	}
 	function setStep(step) {
 		var order = ['check', 'db', 'extract', 'import', 'replace', 'finalize'], idx = 'done' === step ? order.length : order.indexOf(step);
@@ -2148,7 +2546,9 @@ class Installer {
 		['host', 'name', 'user', 'password', 'prefix', 'site_url', 'home_url'].forEach(function (k) { if (d[k] !== undefined) { f.elements[k].value = d[k]; } });
 		$('path').value = d.path || '';
 	}
+	var hasBackup = false;
 	function updateProgress(d) {
+		if (d.backup !== undefined) { hasBackup = !!d.backup; }
 		var pct = Math.max(0, Math.min(100, Number(d.progress) || 0));
 		$('bar-fill').style.width = pct + '%';
 		$('pct').textContent = pct.toFixed(pct >= 100 ? 0 : 1) + ' %';
@@ -2168,8 +2568,25 @@ class Installer {
 			li.textContent = r.errors + ' erreur(s) SQL et ' + r.warnings + ' avertissement(s) : consultez le journal.';
 			notes.appendChild(li);
 		}
+		$('restore').hidden = !d.backup;
 		show('done');
 		verifySite(r);
+	}
+	// Annulation : la destination redevient telle qu'elle était avant l'installation.
+	function restore() {
+		if (!window.confirm('Remettre le site de destination tel qu’il était avant l’installation ? Le site migré sera supprimé.')) { return; }
+		error('');
+		show('run');
+		$('run-title').textContent = 'Restauration de l’ancien site…';
+		$('detail').textContent = '';
+		(function loop() {
+			api('restore').then(function (d) {
+				if (!d.ok) { error(d.message, d.solution); return; }
+				$('detail').textContent = d.detail || '';
+				if (d.phase === 'restored') { setStep('done'); show('restored'); return; }
+				setTimeout(loop, 300);
+			}).catch(function (e) { error(e.message, 'Rechargez la page : la restauration reprendra.'); });
+		})();
 	}
 	// Contrôle du site migré, depuis le navigateur (même adresse que l'installeur).
 	function verifySite(r) {
@@ -2301,6 +2718,11 @@ class Installer {
 		var b = document.createElement('button'); b.className = 'btn primary'; b.textContent = 'Reprendre';
 		b.onclick = function () { b.remove(); error(''); retries = 0; run(); };
 		$('error').appendChild(b);
+		if (hasBackup) {
+			var r = document.createElement('button'); r.className = 'btn'; r.textContent = 'Annuler : restaurer l’ancien site';
+			r.onclick = restore;
+			$('error').appendChild(r);
+		}
 	}
 	function start() {
 		error('');
@@ -2323,6 +2745,13 @@ class Installer {
 		}).catch(function (e) { $('test-db').disabled = false; error(e.message); });
 	};
 	$('db-form').addEventListener('submit', function (e) { e.preventDefault(); start(); });
+	$('restore').onclick = restore;
+	$('cleanup-restored').onclick = function () {
+		$('cleanup-restored').disabled = true;
+		api('cleanup').then(function (d) {
+			if (d.ok) { window.location.href = d.redirect; } else { $('cleanup-restored').disabled = false; error(d.message, d.solution); }
+		}).catch(function (e) { $('cleanup-restored').disabled = false; error(e.message); });
+	};
 	$('cleanup').onclick = function () {
 		$('cleanup').disabled = true;
 		api('cleanup').then(function (d) {
@@ -2335,6 +2764,8 @@ class Installer {
 		if (d.password_saved) { $('password').placeholder = 'Mot de passe enregistré : laissez vide pour le conserver'; }
 		if (d.existing && B.mode !== 'direct') { $('db-hint').textContent = 'Identifiants pré-remplis depuis le wp-config.php existant : vérifiez-les.'; }
 		if (d.phase === 'done') { done(d.progress); return; }
+		if (d.phase === 'restored') { setStep('done'); show('restored'); return; }
+		if (d.phase === 'restoring') { hasBackup = true; show('run'); $('run-title').textContent = 'Restauration de l’ancien site…'; (function resume() { api('restore').then(function (x) { if (!x.ok) { error(x.message, x.solution); return; } $('detail').textContent = x.detail || ''; if (x.phase === 'restored') { show('restored'); return; } setTimeout(resume, 300); }).catch(function (e) { error(e.message, 'Rechargez la page.'); }); })(); return; }
 		if (B.phases.indexOf(d.phase) > -1) { show('run'); updateProgress(d.progress); run(); return; }
 		var okEnv = renderChecks(d.checks);
 		show('check'); setStep('check');
