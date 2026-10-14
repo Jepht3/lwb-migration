@@ -8,7 +8,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-14 14:39+0000\n"
+"POT-Creation-Date: 2026-10-14 16:02+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 msgid "Fichiers"
 msgstr ""
 
-#: admin/views/progress.php:14 admin/views/tab-settings.php:82 includes/class-admin.php:144
+#: admin/views/progress.php:14 admin/views/tab-settings.php:82 includes/class-admin.php:150
 msgid "Base de données"
 msgstr ""
 
@@ -66,7 +66,7 @@ msgstr ""
 msgid "Automatique (recommandé)"
 msgstr ""
 
-#: admin/views/tab-settings.php:24 includes/class-admin.php:150
+#: admin/views/tab-settings.php:24 includes/class-admin.php:156
 msgid "ZIP standard"
 msgstr ""
 
@@ -226,15 +226,37 @@ msgstr ""
 msgid "Ouvrir l’installeur sur la destination"
 msgstr ""
 
-#: admin/views/page.php:25 includes/class-admin.php:38 includes/class-admin.php:39
+#: admin/views/page.php:26 includes/class-admin.php:43 includes/class-admin.php:44
 msgid "Lwb Migration"
 msgstr ""
 
-#: admin/views/page.php:26
+#: admin/views/page.php:27
 msgid "Déplacez votre site WordPress vers n’importe quel serveur, en toute sécurité."
 msgstr ""
 
-#: admin/views/page.php:29
+#. translators: %s: numéro de version.
+#: admin/views/page.php:35
+#, php-format
+msgid "Version %s disponible"
+msgstr ""
+
+#: admin/views/page.php:39 admin/js/admin.js:542
+msgid "Mettre à jour"
+msgstr ""
+
+#: admin/views/page.php:43 admin/js/admin.js:546
+msgid "À jour"
+msgstr ""
+
+#: admin/views/page.php:43 admin/js/admin.js:546
+msgid "Mises à jour automatiques"
+msgstr ""
+
+#: admin/views/page.php:45 admin/js/admin.js:547 admin/js/admin.js:562 admin/js/admin.js:567
+msgid "Vérifier"
+msgstr ""
+
+#: admin/views/page.php:48
 msgid "Sections"
 msgstr ""
 
@@ -246,7 +268,7 @@ msgstr ""
 msgid "Une archive (fichiers + base de données) et un installer.php autonome, prêts à déposer sur le nouveau serveur."
 msgstr ""
 
-#: admin/views/tab-export.php:24 includes/class-admin.php:55 includes/class-admin.php:116
+#: admin/views/tab-export.php:24 includes/class-admin.php:60 includes/class-admin.php:122
 msgid "Exporter"
 msgstr ""
 
@@ -454,6 +476,18 @@ msgstr ""
 msgid "Le site de destination sera entièrement remplacé par ce site. Continuer ?"
 msgstr ""
 
+#: admin/js/admin.js:540
+msgid "Version"
+msgstr ""
+
+#: admin/js/admin.js:540
+msgid "disponible"
+msgstr ""
+
+#: admin/js/admin.js:555
+msgid "Vérification…"
+msgstr ""
+
 #: includes/class-direct-transfer.php:113
 msgid "La clé de migration est invalide."
 msgstr ""
@@ -487,54 +521,78 @@ msgid "Générez la clé sur le site de destination, puis collez-la ici, sur le 
 msgstr ""
 
 #. translators: %s: erreur réseau.
-#: includes/class-direct-transfer.php:440
+#: includes/class-direct-transfer.php:427
 #, php-format
 msgid "Le site de destination est injoignable : %s"
 msgstr ""
 
-#: includes/class-direct-transfer.php:441
+#: includes/class-direct-transfer.php:428
 msgid "Vérifiez que le site de destination est en ligne et que son certificat SSL est valide. Le transfert reprendra automatiquement."
 msgstr ""
 
+#: includes/class-direct-transfer.php:456
+msgid "L’hébergeur du site de destination limite temporairement le nombre de requêtes (HTTP 429)."
+msgstr ""
+
+#: includes/class-direct-transfer.php:457
+msgid "Rien à faire : le transfert ralentit sa cadence et reprend automatiquement."
+msgstr ""
+
 #. translators: %d: code HTTP.
-#: includes/class-direct-transfer.php:449
+#: includes/class-direct-transfer.php:465
+#, php-format
+msgid "Le pare-feu anti-robot de l’hébergeur du site de destination bloque le transfert (HTTP %d)."
+msgstr ""
+
+#. translators: %s: adresse IP du serveur source.
+#: includes/class-direct-transfer.php:468
+#, php-format
+msgid "Autorisez l’adresse IP de ce serveur (%s) dans la protection anti-robot de l’hébergeur de destination (chez o2switch : cPanel › Outils o2switch › Sécurité), ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php)."
+msgstr ""
+
+#: includes/class-direct-transfer.php:469
+msgid "Autorisez ce serveur dans la protection anti-robot de l’hébergeur de destination, ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php)."
+msgstr ""
+
+#. translators: %d: code HTTP.
+#: includes/class-direct-transfer.php:474
 #, php-format
 msgid "Réponse inattendue du site de destination (HTTP %d)."
 msgstr ""
 
-#: includes/class-direct-transfer.php:451
+#: includes/class-direct-transfer.php:476
 msgid "Le serveur de destination refuse les envois volumineux : augmentez post_max_size ou client_max_body_size (nginx)."
 msgstr ""
 
-#: includes/class-direct-transfer.php:452
+#: includes/class-direct-transfer.php:477
 msgid "Vérifiez que Lwb Migration est activée sur le site de destination et qu’aucun pare-feu ne bloque admin-ajax.php."
 msgstr ""
 
-#: includes/class-direct-transfer.php:458
+#: includes/class-direct-transfer.php:483
 msgid "Le site de destination a refusé la requête."
 msgstr ""
 
-#: includes/class-direct-transfer.php:477
+#: includes/class-direct-transfer.php:561
 msgid "Les versions de Lwb Migration des deux sites sont incompatibles."
 msgstr ""
 
-#: includes/class-direct-transfer.php:478
+#: includes/class-direct-transfer.php:562
 msgid "Mettez à jour l’extension sur les deux sites."
 msgstr ""
 
-#: includes/class-direct-transfer.php:505
+#: includes/class-direct-transfer.php:589
 msgid "Archive introuvable pour le transfert."
 msgstr ""
 
-#: includes/class-direct-transfer.php:505
+#: includes/class-direct-transfer.php:589
 msgid "Relancez la migration directe."
 msgstr ""
 
-#: includes/class-installer-builder.php:86
+#: includes/class-installer-builder.php:97
 msgid "Impossible d’écrire installer.php."
 msgstr ""
 
-#: includes/class-installer-builder.php:87
+#: includes/class-installer-builder.php:98
 msgid "Vérifiez les permissions d’écriture et l’espace disque."
 msgstr ""
 
@@ -562,7 +620,7 @@ msgstr ""
 msgid "Vérifiez les permissions du dossier de stockage."
 msgstr ""
 
-#: includes/class-ajax.php:199 includes/class-admin.php:112
+#: includes/class-ajax.php:199 includes/class-updater.php:395 includes/class-admin.php:118
 msgid "Accès refusé."
 msgstr ""
 
@@ -572,6 +630,22 @@ msgstr ""
 
 #: includes/class-ajax.php:247
 msgid "Réglages enregistrés."
+msgstr ""
+
+#: includes/class-updater.php:261
+msgid "Migrez un site WordPress complet (fichiers + base de données) vers n’importe quel serveur, sans configuration : export en un clic, installer.php autonome ou migration directe de serveur à serveur."
+msgstr ""
+
+#: includes/class-updater.php:296
+msgid "Lwb Migration : le fichier de mise à jour téléchargé est corrompu (empreinte SHA-256 invalide). Réessayez plus tard."
+msgstr ""
+
+#: includes/class-updater.php:383
+msgid "Vérifier les mises à jour"
+msgstr ""
+
+#: includes/class-updater.php:384
+msgid "Page de l’extension"
 msgstr ""
 
 #: includes/class-security.php:30
@@ -598,45 +672,45 @@ msgstr ""
 msgid "Vérifiez que wp-content/uploads existe et est accessible en écriture (permissions 755)."
 msgstr ""
 
-#: includes/class-admin.php:67
+#: includes/class-admin.php:72
 msgid "Lwb Migration : migration terminée, les fichiers d’installation restants ont été supprimés."
 msgstr ""
 
-#: includes/class-admin.php:117
+#: includes/class-admin.php:123
 msgid "Migration directe"
 msgstr ""
 
-#: includes/class-admin.php:118
+#: includes/class-admin.php:124
 msgid "Paramètres"
 msgstr ""
 
-#: includes/class-admin.php:139
+#: includes/class-admin.php:145
 msgid "Version de PHP"
 msgstr ""
 
-#: includes/class-admin.php:149
+#: includes/class-admin.php:155
 msgid "Format d’archive"
 msgstr ""
 
-#: includes/class-admin.php:150
+#: includes/class-admin.php:156
 msgid "LWB (repli sans compression)"
 msgstr ""
 
-#: includes/class-admin.php:154
+#: includes/class-admin.php:160
 msgid "Durée d’une étape"
 msgstr ""
 
 #. translators: 1: budget en secondes, 2: max_execution_time.
-#: includes/class-admin.php:156
+#: includes/class-admin.php:162
 #, php-format
 msgid "%1$s s (max_execution_time : %2$s)"
 msgstr ""
 
-#: includes/class-admin.php:156
+#: includes/class-admin.php:162
 msgid "illimité"
 msgstr ""
 
-#: includes/class-admin.php:160
+#: includes/class-admin.php:166
 msgid "Mémoire PHP"
 msgstr ""
 

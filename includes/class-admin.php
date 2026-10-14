@@ -17,6 +17,11 @@ class Admin {
 	const SLUG = 'lwb-migration';
 
 	/**
+	 * Icône du menu (SVG monochrome recoloré par WordPress).
+	 */
+	const MENU_ICON = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMCAyMCI+PHBhdGggZmlsbD0iYmxhY2siIGQ9Ik0zIDJoOC41QTEuNSAxLjUgMCAwIDEgMTMgMy41VjhoLTEuNlY1LjJIMy42djQuMkg2VjExSDNBMS41IDEuNSAwIDAgMSAxLjUgOS41di02QTEuNSAxLjUgMCAwIDEgMyAyem01IDdoOWExLjUgMS41IDAgMCAxIDEuNSAxLjV2NkExLjUgMS41IDAgMCAxIDE3IDE4SDhhMS41IDEuNSAwIDAgMS0xLjUtMS41di02QTEuNSAxLjUgMCAwIDEgOCA5em0xLjIgMy4ydjMuNmg2LjZ2LTMuNnpNMy42IDEyLjRoMS42djEuNGMwIC4zLjIuNS41LjVoLjNsLS45LS45IDEuMS0xLjEgMi44IDIuOC0yLjggMi44LTEuMS0xLjEuOS0uOWgtLjNhMi4xIDIuMSAwIDAgMS0yLjEtMi4xeiIvPjwvc3ZnPg==';
+
+	/**
 	 * Crochets.
 	 *
 	 * @return void
@@ -40,7 +45,7 @@ class Admin {
 			Security::CAPABILITY,
 			self::SLUG,
 			array( __CLASS__, 'render' ),
-			'dashicons-migrate',
+			self::MENU_ICON,
 			80
 		);
 	}
@@ -87,6 +92,7 @@ class Admin {
 			array(
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( Security::NONCE ),
+				'update'  => Updater::status(),
 			)
 		);
 	}

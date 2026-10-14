@@ -68,6 +68,17 @@ class Installer_Builder {
 		if ( 1 !== $count ) {
 			throw new Migration_Exception( 'Modèle d’installeur invalide.', 'Réinstallez l’extension Lwb Migration.' );
 		}
+		$font     = LWB_MIGRATION_DIR . 'assets/fonts/plus-jakarta-sans.woff2';
+		$font_b64 = is_file( $font ) ? base64_encode( (string) file_get_contents( $font ) ) : ''; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- police embarquée dans le fichier autonome.
+		$template = preg_replace_callback(
+			'#/\*LWB_FONT_START\*/.*?/\*LWB_FONT_END\*/\s*;?#s',
+			function () use ( $font_b64 ) {
+				// Point-virgule fourni ici : le reformatage automatique peut le déplacer.
+				return "'" . $font_b64 . "';";
+			},
+			$template,
+			1
+		);
 		return $code . "\n" . $template;
 	}
 

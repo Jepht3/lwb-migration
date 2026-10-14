@@ -1,0 +1,69 @@
+name: Release
+
+# Publier une version : mettre à jour « Version » (lwb-migration.php), LWB_MIGRATION_VERSION,
+# « Stable tag » et le Changelog de readme.txt, puis :
+#   git tag v1.2.0 && git push origin v1.2.0
+# La release GitHub (zip + latest.json) est créée automatiquement. La page
+# https://lewebmax.com/lwb-migration/ et tous les sites équipés la voient aussitôt.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    name: Tests PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['7.4', '8.4']
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      LWB_TEST_DB_HOST: 127.0.0.1
+      LWB_TEST_DB_USER: root
+      LWB_TEST_DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, zip, zlib
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - run: vendor/bin/phpcs -q
+      - run: vendor/bin/phpunit
+
+  release:
+    name: Publication
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zip
+          coverage: none
+      - name: Construction du zip
+        run: php bin/build.php
+      - name: Manifeste latest.json (vérifie aussi que le tag correspond à la version)
+        run: php bin/manifest.php "${GITHUB_REF_NAME}"
+      - name: Création de la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/lwb-migration.zip dist/latest.json \
+            --title "Lwb Migration ${GITHUB_REF_NAME#v}" \
+            --notes-file dist/notes.md \
+            --latest

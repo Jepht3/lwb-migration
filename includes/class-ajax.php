@@ -20,7 +20,7 @@ class Ajax {
 	 * @return void
 	 */
 	public static function register() {
-		$actions = array( 'export_start', 'job_step', 'job_cancel', 'packages', 'package_delete', 'settings_save', 'key_generate', 'key_revoke', 'direct_start', 'download' );
+		$actions = array( 'export_start', 'job_step', 'job_cancel', 'packages', 'package_delete', 'settings_save', 'key_generate', 'key_revoke', 'direct_start', 'download', 'check_update' );
 		foreach ( $actions as $action ) {
 			add_action( 'wp_ajax_lwb_migration_' . $action, array( __CLASS__, $action ) );
 		}
@@ -272,6 +272,16 @@ class Ajax {
 		Security::check_ajax();
 		Direct_Transfer::revoke();
 		wp_send_json_success();
+	}
+
+	/**
+	 * Vérifie immédiatement la présence d'une nouvelle version.
+	 *
+	 * @return void
+	 */
+	public static function check_update() {
+		Security::check_ajax();
+		wp_send_json_success( Updater::check_now() );
 	}
 
 	/**

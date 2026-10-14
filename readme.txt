@@ -1,10 +1,10 @@
 === Lwb Migration ===
-Contributors: lwb
+Contributors: lewebmax
 Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
-Tested up to: 6.6
+Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -83,5 +83,14 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 
 == Changelog ==
 
+= 1.1.0 =
+* Migration directe compatible avec les pare-feux anti-robot des hébergeurs (o2switch PowerBoost, Imunify360…) : envoi en PUT avec repli automatique en POST
+* Gestion des limitations de débit (HTTP 429) : attente, nouvel essai et cadence adaptée
+* Message clair et solution quand un pare-feu bloque le transfert
+* Mises à jour automatiques : la nouvelle version est proposée dans Extensions › Mises à jour, avec vérification SHA-256 du fichier
+* Bouton « Vérifier les mises à jour » dans l’extension
+* Nouvelle identité visuelle aux couleurs de Lewebmax et nouvelle icône
+* Les notices des autres extensions ne s’affichent plus dans l’en-tête
+
 = 1.0.0 =
-* Première version.
+* Première version

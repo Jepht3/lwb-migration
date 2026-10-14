@@ -526,7 +526,62 @@
 		} );
 	}
 
+	/* ------------------------------------------------------------------ */
+	/* Mises à jour                                                        */
+	/* ------------------------------------------------------------------ */
+
+	function renderUpdate( st ) {
+		var box = $( '#lwbm-update' );
+		if ( ! box || ! st ) {
+			return;
+		}
+		box.textContent = '';
+		if ( st.has_update ) {
+			box.appendChild( el( 'span', { className: 'lwbm-update-state is-new' }, [ icon( 'update' ), __( 'Version' ) + ' ' + st.latest + ' ' + __( 'disponible' ) ] ) );
+			if ( st.update_url ) {
+				box.appendChild( el( 'a', { className: 'lwbm-update-btn', href: st.update_url, text: __( 'Mettre à jour' ) } ) );
+			}
+			return;
+		}
+		box.appendChild( el( 'span', { className: 'lwbm-update-state' }, [ icon( 'yes-alt' ), st.latest ? __( 'À jour' ) + ' (v' + st.current + ')' : __( 'Mises à jour automatiques' ) ] ) );
+		var btn = el( 'button', { type: 'button', className: 'lwbm-update-btn', text: __( 'Vérifier' ) } );
+		btn.addEventListener( 'click', function () { checkUpdate( btn ); } );
+		box.appendChild( btn );
+	}
+
+	function checkUpdate( btn ) {
+		if ( btn ) {
+			btn.classList.add( 'is-busy' );
+			btn.textContent = __( 'Vérification…' );
+		}
+		return post( 'check_update' ).then( function ( res ) {
+			if ( res.ok ) {
+				renderUpdate( res.data );
+			} else if ( btn ) {
+				btn.classList.remove( 'is-busy' );
+				btn.textContent = __( 'Vérifier' );
+			}
+		} ).catch( function () {
+			if ( btn ) {
+				btn.classList.remove( 'is-busy' );
+				btn.textContent = __( 'Vérifier' );
+			}
+		} );
+	}
+
+	function initUpdate() {
+		var btn = $( '[data-lwbm-check-update]' );
+		if ( btn ) {
+			btn.addEventListener( 'click', function () { checkUpdate( btn ); } );
+		}
+		// Première visite : interroge le serveur en arrière-plan, sans bloquer la page.
+		if ( cfg.update && ! cfg.update.known ) {
+			checkUpdate( null );
+		}
+	}
+
 	document.addEventListener( 'DOMContentLoaded', function () {
+		initUpdate();
 		initExport();
 		initDirect();
 		initSettings();

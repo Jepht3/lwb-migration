@@ -27,7 +27,7 @@ class Direct_Transfer {
 	const KEY_PREFIX = 'LWB1';
 	const MAX_SKEW   = 900;
 	const MIN_CHUNK  = 262144;
-	const MAX_CHUNK  = 8388608;
+	const MAX_CHUNK  = 4194304;
 
 	// ------------------------------------------------------------------
 	// Destination : clé et réception.
@@ -400,7 +400,13 @@ class Direct_Transfer {
 	/**
 	 * Requête signée vers la destination.
 	 *
-	 * @param array  $remote Informations de la clé.
+	 * Les données partent en PUT par défaut : de nombreux pare-feu d'hébergeurs (o2switch
+	 * « PowerBoost », Imunify360, Sucuri…) imposent un test anti-robot à toute requête POST
+	 * venant d'un serveur, mais laissent passer PUT. Si la destination refuse PUT, repli
+	 * automatique en POST. La méthode qui fonctionne est mémorisée dans $remote['method'].
+	 * Les limitations de débit (HTTP 429) sont absorbées par une attente puis un nouvel essai.
+	 *
+	 * @param array  $remote Informations de la clé (modifiées : méthode retenue, cadence).
 	 * @param string $op     Opération.
 	 * @param string $offset Offset.
 	 * @param string $extra  Paramètre supplémentaire.
@@ -408,43 +414,62 @@ class Direct_Transfer {
 	 * @return array Réponse JSON décodée.
 	 * @throws Migration_Exception Erreur réseau ou refus.
 	 */
-	private static function request( array $remote, $op, $offset = '0', $extra = '', $body = '' ) {
-		$ts    = time();
-		$nonce = Runtime::random_hex( 16 );
-		$sig   = Security::sign( $remote['secret'], self::signature_base( $op, $remote['kid'], $ts, $nonce, $offset, $extra, $body ) );
-		$url   = add_query_arg(
-			array(
-				'action' => 'lwb_migration_receive',
-				'op'     => $op,
-				'kid'    => $remote['kid'],
-				'ts'     => $ts,
-				'n'      => $nonce,
-				'offset' => $offset,
-				'x'      => rawurlencode( $extra ),
-				'sig'    => $sig,
-			),
-			$remote['url']
-		);
-		$res   = wp_remote_post(
-			$url,
-			array(
-				'timeout'     => 120,
-				'redirection' => 0,
-				'body'        => $body,
-				'headers'     => array( 'Content-Type' => 'application/octet-stream' ),
-				'sslverify'   => (bool) apply_filters( 'lwb_migration_sslverify', true ),
-			)
-		);
-		if ( is_wp_error( $res ) ) {
+	private static function request( array &$remote, $op, $offset = '0', $extra = '', $body = '' ) {
+		$methods = ! empty( $remote['method'] ) ? array( (string) $remote['method'] ) : array( 'PUT', 'POST' );
+		$code    = 0;
+		$raw     = '';
+		$json    = null;
+		foreach ( $methods as $method ) {
+			for ( $attempt = 0; $attempt < 3; $attempt++ ) {
+				$res = self::send( $remote, $method, $op, $offset, $extra, $body );
+				if ( is_wp_error( $res ) ) {
+					throw new Migration_Exception(
+						sprintf( /* translators: %s: erreur réseau. */ __( 'Le site de destination est injoignable : %s', 'lwb-migration' ), $res->get_error_message() ),
+						__( 'Vérifiez que le site de destination est en ligne et que son certificat SSL est valide. Le transfert reprendra automatiquement.', 'lwb-migration' ),
+						true
+					);
+				}
+				$code = (int) wp_remote_retrieve_response_code( $res );
+				$raw  = (string) wp_remote_retrieve_body( $res );
+				$json = json_decode( $raw, true );
+				if ( 429 !== $code ) {
+					break;
+				}
+				// Limitation de débit de l'hébergeur : on ralentit et on réessaie.
+				$remote['pace'] = 1;
+				$wait           = (int) wp_remote_retrieve_header( $res, 'retry-after' );
+				$wait           = $wait > 0 ? min( 15, $wait ) : 3 * ( $attempt + 1 );
+				if ( $attempt < 2 ) {
+					sleep( $wait );
+				}
+			}
+			if ( is_array( $json ) ) {
+				$remote['method'] = $method;
+				break;
+			}
+			if ( 429 === $code ) {
+				break;
+			}
+		}
+		if ( 429 === $code ) {
 			throw new Migration_Exception(
-				sprintf( /* translators: %s: erreur réseau. */ __( 'Le site de destination est injoignable : %s', 'lwb-migration' ), $res->get_error_message() ),
-				__( 'Vérifiez que le site de destination est en ligne et que son certificat SSL est valide. Le transfert reprendra automatiquement.', 'lwb-migration' ),
+				__( 'L’hébergeur du site de destination limite temporairement le nombre de requêtes (HTTP 429).', 'lwb-migration' ),
+				__( 'Rien à faire : le transfert ralentit sa cadence et reprend automatiquement.', 'lwb-migration' ),
 				true
 			);
 		}
-		$code = (int) wp_remote_retrieve_response_code( $res );
-		$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
 		if ( ! is_array( $json ) ) {
+			if ( self::is_firewall_page( $code, $raw ) ) {
+				$ip = isset( $_SERVER['SERVER_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_ADDR'] ) ) : '';
+				throw new Migration_Exception(
+					sprintf( /* translators: %d: code HTTP. */ __( 'Le pare-feu anti-robot de l’hébergeur du site de destination bloque le transfert (HTTP %d).', 'lwb-migration' ), $code ),
+					'' !== $ip
+						/* translators: %s: adresse IP du serveur source. */
+						? sprintf( __( 'Autorisez l’adresse IP de ce serveur (%s) dans la protection anti-robot de l’hébergeur de destination (chez o2switch : cPanel › Outils o2switch › Sécurité), ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php).', 'lwb-migration' ), $ip )
+						: __( 'Autorisez ce serveur dans la protection anti-robot de l’hébergeur de destination, ou désactivez-la le temps de la migration, puis relancez. Vous pouvez aussi utiliser l’export classique (archive + installer.php).', 'lwb-migration' ),
+					false
+				);
+			}
 			throw new Migration_Exception(
 				sprintf( /* translators: %d: code HTTP. */ __( 'Réponse inattendue du site de destination (HTTP %d).', 'lwb-migration' ), $code ),
 				413 === $code
@@ -464,13 +489,72 @@ class Direct_Transfer {
 	}
 
 	/**
+	 * Envoie une requête signée (nouvel horodatage et nouvel aléa à chaque essai).
+	 *
+	 * @param array  $remote Informations de la clé.
+	 * @param string $method PUT ou POST.
+	 * @param string $op     Opération.
+	 * @param string $offset Offset.
+	 * @param string $extra  Paramètre supplémentaire.
+	 * @param string $body   Corps.
+	 * @return array|\WP_Error
+	 */
+	private static function send( array $remote, $method, $op, $offset, $extra, $body ) {
+		$ts    = time();
+		$nonce = Runtime::random_hex( 16 );
+		$sig   = Security::sign( $remote['secret'], self::signature_base( $op, $remote['kid'], $ts, $nonce, $offset, $extra, $body ) );
+		$url   = add_query_arg(
+			array(
+				'action' => 'lwb_migration_receive',
+				'op'     => $op,
+				'kid'    => $remote['kid'],
+				'ts'     => $ts,
+				'n'      => $nonce,
+				'offset' => $offset,
+				'x'      => rawurlencode( $extra ),
+				'sig'    => $sig,
+			),
+			$remote['url']
+		);
+		return wp_remote_request(
+			$url,
+			array(
+				'method'      => $method,
+				'timeout'     => 120,
+				'redirection' => 0,
+				'body'        => $body,
+				'user-agent'  => 'LwbMigration/' . LWB_MIGRATION_VERSION . '; ' . home_url( '/' ),
+				'headers'     => array(
+					'Content-Type' => 'application/octet-stream',
+					'Accept'       => 'application/json',
+				),
+				'sslverify'   => (bool) apply_filters( 'lwb_migration_sslverify', true ),
+			)
+		);
+	}
+
+	/**
+	 * La réponse est-elle une page de pare-feu / test anti-robot ?
+	 *
+	 * @param int    $code Code HTTP.
+	 * @param string $body Corps.
+	 * @return bool
+	 */
+	private static function is_firewall_page( $code, $body ) {
+		if ( ! in_array( $code, array( 403, 406, 409, 503 ), true ) ) {
+			return false;
+		}
+		return (bool) preg_match( '/security check|test de s[ée]curit[ée]|captcha|challenge|are you a (human|robot)|access denied|sucuri|imunify|wordfence|cloudflare|mod_security|not acceptable/i', $body );
+	}
+
+	/**
 	 * Vérifie la destination avant de lancer l'export.
 	 *
-	 * @param array $remote Clé décodée.
+	 * @param array $remote Clé décodée (complétée avec la méthode HTTP retenue).
 	 * @return array Informations de la destination.
 	 * @throws Migration_Exception Incompatibilité.
 	 */
-	public static function hello( array $remote ) {
+	public static function hello( array &$remote ) {
 		$info = self::request( $remote, 'hello' );
 		if ( Exporter::FORMAT_VERSION !== (int) $info['format_version'] ) {
 			throw new Migration_Exception(
@@ -510,6 +594,9 @@ class Direct_Transfer {
 				// On ne démarre un envoi que s'il reste du temps pour l'attendre.
 				if ( $rt->remaining() < 3 && $rt->elapsed() > 0.5 ) {
 					break;
+				}
+				if ( ! empty( $d['direct']['pace'] ) ) {
+					sleep( 1 ); // Hébergeur qui limite le débit : on espace les envois.
 				}
 				fseek( $h, $t['offset'] );
 				$chunk = (string) fread( $h, (int) min( $t['chunk'], $t['size'] - $t['offset'] ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread

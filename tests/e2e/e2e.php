@@ -115,7 +115,7 @@ function scalar( mysqli $m, $sql ) {
 /* Serveurs PHP intégrés                                                */
 /* ------------------------------------------------------------------ */
 
-function start_server( $port, $docroot, $max_exec, $name ) {
+function start_server( $port, $docroot, $max_exec, $name, $router = null ) {
 	global $servers;
 	$log = E2E_WORK . "/php-$name.log";
 	$cmd = array(
@@ -132,6 +132,9 @@ function start_server( $port, $docroot, $max_exec, $name ) {
 		'-S', "127.0.0.1:$port",
 		'-t', $docroot,
 	);
+	if ( $router ) {
+		$cmd[] = $router;
+	}
 	// Étapes de 0,25 s : force des dizaines de requêtes, donc de points de reprise.
 	$env  = array_merge( getenv(), array( 'PHP_CLI_SERVER_WORKERS' => '4', 'LWB_MIGRATION_STEP_BUDGET' => '0.25' ) );
 	$proc = proc_open( $cmd, array( 0 => array( 'pipe', 'r' ), 1 => array( 'file', E2E_WORK . "/server-$name.out", 'a' ), 2 => array( 'file', E2E_WORK . "/server-$name.out", 'a' ) ), $pipes, null, $env );
@@ -390,7 +393,7 @@ function install_wp( $abspath, $url, $dbname, $prefix, $title, $extra_defines = 
 	}
 	$config .= "\$table_prefix = '$prefix';\n"
 		. "define( 'WP_DEBUG', true );\ndefine( 'WP_DEBUG_DISPLAY', false );\ndefine( 'DISABLE_WP_CRON', true );\ndefine( 'AUTOMATIC_UPDATER_DISABLED', true );\ndefine( 'WP_HTTP_BLOCK_EXTERNAL', true );\ndefine( 'WP_ACCESSIBLE_HOSTS', 'localhost,127.0.0.1' );\n"
-		. "define( 'WP_TEMP_DIR', '$abspath/wp-content/upgrade' );\n"
+		. "define( 'WP_TEMP_DIR', '$abspath/wp-content/temp' );\n"
 		. $extra_defines
 		. "/* That's all, stop editing! Happy publishing. */\n"
 		. "if ( ! defined( 'ABSPATH' ) ) {\n\tdefine( 'ABSPATH', __DIR__ . '/' );\n}\nrequire_once ABSPATH . 'wp-settings.php';\n";
@@ -631,11 +634,12 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 	ok( md5_file( $src_big ) === md5_file( "$root/wp-content/uploads/gros-fichier.bin" ), "$label : gros fichier (30 Mo) identique" );
 	ok( 'accents' === @file_get_contents( "$root/wp-content/uploads/été ünicode.txt" ), "$label : nom de fichier Unicode" );
 	ok( is_dir( "$root/wp-content/uploads/dossier-vide" ), "$label : dossier vide conservé" );
+	ok( is_dir( "$root/wp-content/upgrade" ), "$label : dossier temporaire wp-content/upgrade recréé" );
 	ok( ! is_dir( "$root/wp-content/plugins/lwb-migration" ) || 'direct' === $label, "$label : extension non copiée" );
 	ok( is_file( "$root/wp-content/advanced-cache.php.lwb-disabled" ) && ! is_file( "$root/wp-content/advanced-cache.php" ), "$label : drop-in de cache désactivé" );
 	$cfg = file_get_contents( "$root/wp-config.php" );
 	ok( false !== strpos( $cfg, "'DB_NAME', '$dbname'" ) && false !== strpos( $cfg, "\$table_prefix = '$prefix';" ), "$label : wp-config.php (base, préfixe)" );
-	ok( false === strpos( $cfg, $old_path ) && false !== strpos( $cfg, "$root/wp-content/upgrade" ), "$label : chemins de wp-config.php mis à jour" );
+	ok( false === strpos( $cfg, $old_path ) && false !== strpos( $cfg, "$root/wp-content/temp" ), "$label : chemins de wp-config.php mis à jour" );
 	$htaccess = file_get_contents( "$root/.htaccess" );
 	$base     = rtrim( (string) parse_url( $url, PHP_URL_PATH ), '/' ) . '/';
 	ok( false !== strpos( $htaccess, "RewriteBase $base" ) && false === strpos( $htaccess, 'ailleurs.example' ), "$label : .htaccess réinitialisé (RewriteBase $base)" );
@@ -669,7 +673,10 @@ ok( ! is_file( "$dst_root/installer.php" ) && ! glob( "$dst_root/lwb-installer-*
 step( 'Scénario 2 – Migration directe vers un WordPress existant (http://localhost:8103)' );
 $b_root = E2E_WORK . '/siteb';
 install_wp( $b_root, 'http://localhost:8103', 'lwb_e2e_b', 'bwp_', 'Site B (sera remplacé)', "define( 'LWB_MIGRATION_ALLOW_HTTP', true );\n" );
-start_server( 8103, $b_root, 6, 'b' );
+// Pare-feu « à la o2switch » : tout POST vers la réception reçoit un test anti-robot (503).
+$waf = E2E_WORK . '/waf-router.php';
+file_put_contents( $waf, '<?php if ( "POST" === $_SERVER["REQUEST_METHOD"] && false !== strpos( $_SERVER["REQUEST_URI"], "lwb_migration_receive" ) ) { http_response_code( 503 ); echo "<html><title>Test de sécurité / Security check</title>Please turn JavaScript on</html>"; return true; } return false;' );
+start_server( 8103, $b_root, 6, 'b', $waf );
 $b_url = 'http://localhost:8103';
 $b     = new Client( 'b' );
 ok( $b->wp_login( $b_url, 'admin', E2E_PASS ), 'connexion à la destination' );
@@ -749,6 +756,73 @@ list( $api3, $final3 ) = drive_installer(
 );
 verify_site( 'lwb', $d3_url, $d3_abs, 'lwb_e2e_d3', 'srcwp_', $src_url, $src_abs );
 $api3( 'cleanup' );
+
+/* ================================================================== */
+/* Scénario 4 : mises à jour automatiques                                */
+/* ================================================================== */
+
+step( 'Scénario 4 – Mises à jour automatiques (wordpress.org injoignable, vérification SHA-256)' );
+@mkdir( "$src_abs/wp-content/temp", 0755, true );
+// Paquet « 9.9.9 » construit à partir de l'extension courante.
+$upd_dir = E2E_WORK . '/update';
+@mkdir( $upd_dir );
+$zipfile = "$src_root/lwb-update.zip";
+$zip     = new ZipArchive();
+$zip->open( $zipfile, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+$it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( "$src_abs/wp-content/plugins/lwb-migration", FilesystemIterator::SKIP_DOTS ) );
+foreach ( $it as $f ) {
+	$rel  = substr( $f->getPathname(), strlen( "$src_abs/wp-content/plugins/" ) );
+	$data = file_get_contents( $f->getPathname() );
+	if ( 'lwb-migration/lwb-migration.php' === $rel ) {
+		$data = preg_replace( '/Version:(\s+)[0-9.]+/', 'Version:${1}9.9.9', $data );
+		$data = str_replace( "'LWB_MIGRATION_VERSION', '" . '1.1.0' . "'", "'LWB_MIGRATION_VERSION', '9.9.9'", $data );
+	}
+	$zip->addFromString( $rel, $data );
+}
+$zip->close();
+$manifest = array(
+	'version'      => '9.9.9',
+	'zip_url'      => 'http://127.0.0.1:8101/lwb-update.zip',
+	'sha256'       => str_repeat( '0', 64 ), // Empreinte volontairement fausse pour le premier essai.
+	'requires'     => '5.8',
+	'requires_php' => '7.4',
+	'tested'       => '6.8',
+	'published'    => gmdate( 'Y-m-d H:i:s' ),
+	'changelog'    => array( 'Version de test' ),
+);
+file_put_contents( "$src_root/manifest.json", json_encode( $manifest ) );
+@mkdir( "$src_abs/wp-content/mu-plugins" );
+file_put_contents( "$src_abs/wp-content/mu-plugins/lwb-test-manifest.php", "<?php add_filter( 'lwb_migration_update_manifest', function () { return 'http://127.0.0.1:8101/manifest.json'; } );\n" );
+
+$check = run_wp_php(
+	$src_abs,
+	'require ABSPATH_ . "/wp-load.php"; wp_set_current_user( 1 ); require_once ABSPATH . "wp-admin/includes/plugin.php";
+	$st = \LwbMigration\Updater::check_now();
+	$t  = get_site_transient( "update_plugins" );
+	$r  = isset( $t->response["lwb-migration/lwb-migration.php"] ) ? $t->response["lwb-migration/lwb-migration.php"] : null;
+	require_once ABSPATH . "wp-admin/includes/plugin-install.php";
+	$info = plugins_api( "plugin_information", array( "slug" => "lwb-migration" ) );
+	echo json_encode( array( "status" => $st, "new" => $r ? $r->new_version : null, "pkg" => $r ? $r->package : null, "info" => is_wp_error( $info ) ? $info->get_error_message() : $info->version ) );'
+);
+$res = json_decode( substr( $check, strpos( $check, '{' ) ), true );
+ok( ! empty( $res['status']['has_update'] ) && '9.9.9' === $res['status']['latest'], 'nouvelle version détectée par le bouton « Vérifier »' );
+ok( '9.9.9' === $res['new'], 'mise à jour visible dans Extensions › Mises à jour (wordpress.org injoignable : filet de sécurité)' );
+ok( '9.9.9' === $res['info'], 'fenêtre « Afficher les détails » renseignée' );
+
+$upgrade = 'require ABSPATH_ . "/wp-load.php"; wp_set_current_user( 1 ); require_once ABSPATH . "wp-admin/includes/admin.php"; require_once ABSPATH . "wp-admin/includes/class-wp-upgrader.php";
+	$u = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+	$r = $u->upgrade( "lwb-migration/lwb-migration.php" );
+	$d = get_plugin_data( WP_PLUGIN_DIR . "/lwb-migration/lwb-migration.php", false, false );
+	$err = $u->skin->result;
+	echo json_encode( array( "result" => is_wp_error( $r ) ? $r->get_error_message() : $r, "skin" => is_wp_error( $err ) ? $err->get_error_code() : null, "version" => $d["Version"], "messages" => $u->skin->get_upgrade_messages() ) );';
+$bad = json_decode( substr( $o = run_wp_php( $src_abs, $upgrade ), strpos( $o, '{' ) ), true );
+ok( '1.1.0' === $bad['version'] && false !== strpos( implode( ' ', $bad['messages'] ), 'SHA-256' ), 'zip à l’empreinte SHA-256 incorrecte refusé (extension inchangée)' ) || print( '    ' . json_encode( $bad, JSON_UNESCAPED_UNICODE ) . "\n" );
+
+$manifest['sha256'] = hash_file( 'sha256', $zipfile );
+file_put_contents( "$src_root/manifest.json", json_encode( $manifest ) );
+run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; \LwbMigration\Updater::check_now();' );
+$good = json_decode( substr( $o = run_wp_php( $src_abs, $upgrade ), strpos( $o, '{' ) ), true );
+ok( '9.9.9' === $good['version'], 'mise à jour authentique installée (version ' . $good['version'] . ')' ) || print( '    ' . json_encode( $good, JSON_UNESCAPED_UNICODE ) . "\n" );
 
 /* ================================================================== */
 /* Journaux PHP                                                          */
