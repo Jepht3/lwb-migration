@@ -31,8 +31,9 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: mysqli, zip, zlib
+          extensions: mysqli, zip, zlib, sodium
           coverage: none
+          tools: cs2pr
       - run: composer install --no-interaction --no-progress
       - name: Standards WordPress + compatibilité PHP 7.4–8.4
         run: vendor/bin/phpcs -q --report=checkstyle | cs2pr
