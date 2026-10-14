@@ -49,10 +49,13 @@ class FileScannerTest extends TestCase {
 		$steps = 0;
 		while ( true ) {
 			$scan = new File_Scanner( $list, $this->rules( $root ), $state );
-			$done = $scan->run( new Runtime( 0.0001 ) );
+			$done = $scan->run( $this->spent_runtime() );
 			++$steps;
 			if ( $done ) {
 				break;
+			}
+			if ( $steps > 50000 ) {
+				$this->fail( 'Aucun progrès : boucle sans fin.' );
 			}
 			if ( 0 === $steps % 3 ) {
 				file_put_contents( $list, "[\"f\",\"/garbage\",\"files/garbage\",1]\n", FILE_APPEND ); // Plantage.

@@ -164,7 +164,7 @@ class Db_Dumper {
 				$this->state['header'] = true;
 				$this->checkpoint();
 			}
-			while ( ! $rt->should_stop() ) {
+			do {
 				$table = $this->current_table();
 				if ( '' === $table ) {
 					$this->write( "\nSET foreign_key_checks = 1;\n-- Fin du dump\n" );
@@ -187,7 +187,7 @@ class Db_Dumper {
 					$this->state['phase'] = 'structure';
 				}
 				$this->checkpoint();
-			}
+			} while ( ! $rt->should_stop() );
 		} finally {
 			$this->close();
 		}

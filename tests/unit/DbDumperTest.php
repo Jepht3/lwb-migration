@@ -71,10 +71,13 @@ class DbDumperTest extends TestCase {
 		$steps = 0;
 		while ( true ) {
 			$dumper = new Db_Dumper( $db, $file, $state );
-			$done   = $dumper->run( new Runtime( 0.0001 ) );
+			$done   = $dumper->run( $this->spent_runtime() );
 			++$steps;
 			if ( $done ) {
 				break;
+			}
+			if ( $steps > 50000 ) {
+				$this->fail( 'Aucun progrès : boucle sans fin.' );
 			}
 			if ( $crash && 0 === $steps % 4 ) {
 				// L'étape a écrit puis « planté » avant la sauvegarde : état précédent conservé.
@@ -101,10 +104,13 @@ class DbDumperTest extends TestCase {
 		};
 		while ( true ) {
 			$importer = new Sql_Importer( $db, $file, $state, $log, $persist );
-			$done     = $importer->run( new Runtime( 0.0001 ) );
+			$done     = $importer->run( $this->spent_runtime() );
 			++$steps;
 			if ( $done ) {
 				break;
+			}
+			if ( $steps > 50000 ) {
+				$this->fail( 'Aucun progrès : boucle sans fin.' );
 			}
 			if ( $crash && in_array( $steps, array( 6, 17, 40 ), true ) ) {
 				// Plantage après exécution de requêtes, avant la sauvegarde de fin d'étape :

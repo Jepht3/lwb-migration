@@ -434,7 +434,7 @@ class Search_Replace {
 			return true;
 		}
 		$pk = $state['pk'];
-		while ( ! $rt->should_stop() ) {
+		do {
 			$batch = max( 10, (int) $state['batch'] );
 			$t0    = microtime( true );
 			if ( ! empty( $pk ) ) {
@@ -526,7 +526,7 @@ class Search_Replace {
 			if ( $fetched < $batch ) {
 				return true;
 			}
-		}
+		} while ( ! $rt->should_stop() );
 		return false;
 	}
 

@@ -135,7 +135,7 @@ class Exporter {
 		}
 		$log = $job->logger();
 		try {
-			while ( ! $rt->should_stop() ) {
+			do {
 				$phase = $job->data['phase'];
 				if ( 'scan' === $phase ) {
 					self::step_scan( $job, $rt );
@@ -156,7 +156,7 @@ class Exporter {
 				if ( $phase === $job->data['phase'] ) {
 					break; // Phase non terminée : budget épuisé.
 				}
-			}
+			} while ( ! $rt->should_stop() );
 			$job->save();
 			$job->unlock();
 			return self::status( $job );
@@ -262,7 +262,7 @@ class Exporter {
 		);
 		$failed   = false;
 		try {
-			while ( ! $rt->should_stop() ) {
+			do {
 				if ( 'files' === $d['archive_sub'] ) {
 					$pos  = ftell( $list );
 					$line = fgets( $list );
@@ -310,7 +310,7 @@ class Exporter {
 					$d['phase'] = 'finalize';
 					break;
 				}
-			}
+			} while ( ! $rt->should_stop() );
 		} catch ( \Throwable $e ) {
 			$failed = true;
 			throw $e;

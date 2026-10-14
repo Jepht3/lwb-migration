@@ -10,6 +10,7 @@ namespace LwbMigration\Tests;
 use LwbMigration\Json_Store;
 use LwbMigration\Migration_Exception;
 use LwbMigration\Mysqli_Db;
+use LwbMigration\Runtime;
 
 abstract class TestCase extends \PHPUnit\Framework\TestCase {
 
@@ -18,6 +19,16 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase {
 
 	/** @var string[] */
 	private $databases = array();
+
+	/**
+	 * Budget déjà épuisé avant le premier travail (serveur lent, mémoire déjà très sollicitée) :
+	 * chaque étape doit malgré tout progresser, sinon la migration tournerait sans fin.
+	 */
+	protected function spent_runtime() {
+		$rt = new Runtime( 0.0001 );
+		usleep( 300 );
+		return $rt;
+	}
 
 	protected function tmp_dir() {
 		$dir = sys_get_temp_dir() . '/lwb-test-' . bin2hex( random_bytes( 6 ) );

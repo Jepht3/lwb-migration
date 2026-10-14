@@ -226,12 +226,15 @@ class File_Scanner {
 	 * @return bool true si l'inventaire est terminé.
 	 */
 	public function run( Runtime $rt ) {
-		$h = $this->open_list();
+		$h     = $this->open_list();
+		$first = true;
 		while ( ! empty( $this->state['stack'] ) ) {
-			if ( $rt->should_stop() ) {
+			// Au moins un dossier par étape, même si le budget est déjà entamé : sinon pas de progrès.
+			if ( ! $first && $rt->should_stop() ) {
 				$this->close_list( $h );
 				return false;
 			}
+			$first                = false;
 			list( $dir, $prefix ) = array_pop( $this->state['stack'] );
 			$dh                   = @opendir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			if ( ! $dh ) {

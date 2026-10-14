@@ -169,7 +169,7 @@ class SearchReplaceTest extends TestCase {
 					$db,
 					$table,
 					$state,
-					new Runtime( 0.0001 ),
+					$this->spent_runtime(),
 					function ( $s ) use ( &$saved ) {
 						$saved = $s;
 					}

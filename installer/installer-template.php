@@ -851,7 +851,7 @@ class Installer {
 		Runtime::prepare();
 		$rt = new Runtime();
 		try {
-			while ( ! $rt->should_stop() && in_array( $this->phase(), self::PHASES, true ) ) {
+			do {
 				$phase = $this->phase();
 				switch ( $phase ) {
 					case 'extract':
@@ -871,7 +871,7 @@ class Installer {
 				if ( $phase === $this->phase() ) {
 					break;
 				}
-			}
+			} while ( ! $rt->should_stop() && in_array( $this->phase(), self::PHASES, true ) );
 		} finally {
 			if ( $lock ) {
 				flock( $lock, LOCK_UN );
@@ -925,7 +925,7 @@ class Installer {
 		$reader           = new Archive_Reader( $this->archive_path() );
 		$st['index_size'] = $reader->index_size();
 		$st['total']      = $reader->count();
-		while ( ! $rt->should_stop() ) {
+		do {
 			if ( empty( $st['entry'] ) ) {
 				$cursor = (int) $st['cursor'];
 				$entry  = $reader->next_entry( $cursor );
@@ -965,7 +965,7 @@ class Installer {
 			$st['entry']  = null;
 			$st['prog']   = array();
 			$st['cursor'] = $st['next'];
-		}
+		} while ( ! $rt->should_stop() );
 	}
 
 	/**
@@ -1092,7 +1092,7 @@ class Installer {
 		}
 		$sr = new Search_Replace( $this->replace_pairs() );
 		$db = $this->db();
-		while ( ! $rt->should_stop() ) {
+		do {
 			if ( ! isset( $st['tables'][ $st['index'] ] ) ) {
 				$this->log()->info( sprintf( 'Rechercher/remplacer terminé : %d ligne(s) modifiée(s).', $st['changed'] ) );
 				$this->state['phase'] = 'finalize';
@@ -1120,7 +1120,7 @@ class Installer {
 				++$st['index'];
 				$st['table'] = array();
 			}
-		}
+		} while ( ! $rt->should_stop() );
 		$db->close();
 	}
 

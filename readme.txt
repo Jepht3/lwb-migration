@@ -91,6 +91,7 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 * Bouton « Vérifier les mises à jour » dans l’extension
 * Nouvelle identité visuelle aux couleurs de Lewebmax et nouvelle icône
 * Les notices des autres extensions ne s’affichent plus dans l’en-tête
+* Correction : une étape ne pouvait plus avancer quand le serveur était déjà très chargé (mémoire ou temps) au moment de la reprendre
 
 = 1.0.0 =
 * Première version

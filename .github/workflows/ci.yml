@@ -37,5 +37,5 @@ jobs:
       - name: Standards WordPress + compatibilité PHP 7.4–8.4
         run: vendor/bin/phpcs -q
       - name: Tests unitaires
-        run: vendor/bin/phpunit --debug
+        run: vendor/bin/phpunit
         timeout-minutes: 5
