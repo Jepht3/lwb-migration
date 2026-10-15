@@ -784,8 +784,9 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 	ok( isset( $opt['object'] ) && json_decode( $opt['object']->deep['json'], true )['u'] === $url, "$label : objet imbriqué + JSON dans du sérialisé" );
 	$double = unserialize( unserialize( scalar( $m, "SELECT option_value FROM {$prefix}options WHERE option_name = 'lwb_double'" ) ) );
 	ok( $double['inner'] === "$url/double", "$label : donnée sérialisée deux fois" );
-	$meta = json_decode( scalar( $m, "SELECT meta_value FROM {$prefix}postmeta WHERE meta_key = '_builder_data' LIMIT 1" ), true );
-	ok( 0 === strpos( $meta['link'], $url ), "$label : URL échappée en JSON (\\/) remplacée" );
+	$raw_meta = (string) scalar( $m, "SELECT meta_value FROM {$prefix}postmeta WHERE meta_key = '_builder_data' LIMIT 1" );
+	$meta     = json_decode( $raw_meta, true );
+	ok( is_array( $meta ) && 0 === strpos( $meta['link'], $url ), "$label : URL échappée en JSON (\\/) remplacée" . ( is_array( $meta ) && 0 === strpos( $meta['link'], $url ) ? '' : ' – valeur : ' . substr( $raw_meta, 0, 300 ) . ' – source : ' . substr( (string) scalar( db( 'lwb_e2e_src' ), "SELECT meta_value FROM srcwp_postmeta WHERE meta_key = '_builder_data' LIMIT 1" ), 0, 300 ) ) );
 	$content = scalar( $m, "SELECT post_content FROM {$prefix}posts WHERE post_title = 'Article 7'" );
 	ok( false !== strpos( $content, rawurlencode( "$url/?p=7" ) ), "$label : URL encodée remplacée" );
 	ok( (int) scalar( $m, "SELECT COUNT(*) FROM {$prefix}usermeta WHERE meta_key = '{$prefix}capabilities'" ) >= 1, "$label : capacités utilisateur au nouveau préfixe" );
