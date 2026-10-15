@@ -68,6 +68,6 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: mysqli, zip, zlib, curl, sodium, openssl
           coverage: none
-      - name: Scénarios complets (export, installeur, migration directe, format LWB, mises à jour)
+      - name: Scénarios complets (export, installeur, migration directe, avant DNS, pull, import, format LWB, mises à jour)
         run: php tests/e2e/e2e.php
-        timeout-minutes: 25
+        timeout-minutes: 45

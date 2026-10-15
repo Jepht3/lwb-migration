@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,6 +20,8 @@ Lwb Migration crée en un clic un **paquet de migration** composé de deux fichi
 Déposez les deux fichiers à la racine du nouveau serveur, ouvrez `votre-domaine/installer.php`, saisissez les accès à la base de données : le site est restauré, avec toutes les URL et tous les chemins remplacés.
 
 **Migration directe** : collez sur le site source une clé générée par le site de destination, et le transfert se fait de serveur à serveur, en HTTPS, par morceaux, sans rien télécharger sur votre ordinateur.
+
+**Chez tous les hébergeurs** : si le pare-feu de la destination bloque les envois, la destination télécharge elle-même l’archive (lien signé, temporaire et reprenable). Le site peut être migré **avant le changement de DNS**, en joignant le nouveau serveur par son adresse IP ou son URL temporaire. Et sans FTP ni migration directe, l’onglet **Importer** du site de destination reçoit l’archive par petits morceaux, depuis le navigateur.
 
 = Conçu pour les hébergements les plus limités =
 
@@ -46,6 +48,8 @@ Déposez les deux fichiers à la racine du nouveau serveur, ouvrez `votre-domain
 * Noms d’archive aléatoires ; `installer.php` protégé par un mot de passe optionnel.
 * Archive et dossier de travail supprimés automatiquement après l’installation ; bouton de suppression de l’installeur.
 * Migration directe : clé signée HMAC-SHA256, valable 24 h, à usage unique, transfert HTTPS obligatoire, chaque morceau signé.
+* Téléchargement par la destination : lien propre à la migration, signé, valable 6 h et révoqué dès la réception de l’archive.
+* Avant le changement de DNS : le certificat SSL est vérifié sur le vrai nom de domaine, même quand le serveur est joint par son adresse IP.
 
 == Installation ==
 
@@ -69,7 +73,19 @@ Par sécurité, `advanced-cache.php` et `object-cache.php` sont renommés en `.l
 
 = Le transfert direct est refusé (HTTPS) =
 
-La migration directe exige un certificat SSL sur le site de destination. Utilisez sinon l’export classique (archive + installer.php).
+La migration directe exige un certificat SSL sur le site de destination. Utilisez sinon l’export classique (archive + installer.php), ou l’onglet « Importer » du site de destination.
+
+= Le pare-feu de l’hébergeur de destination bloque le transfert =
+
+En mode de transfert « Automatique » (par défaut), la migration directe bascule toute seule sur le téléchargement par la destination : celle-ci récupère l’archive par des requêtes GET sortantes, que les pare-feux laissent passer. Vous pouvez aussi choisir ce mode dans les options avancées de la migration directe.
+
+= Puis-je migrer avant de changer les DNS ? =
+
+Oui. Dans les options avancées de la migration directe, indiquez l’adresse IP du nouveau serveur (ou son URL temporaire). Le site est transféré puis installé sur le nouveau serveur avec son adresse définitive, sans que votre navigateur ait besoin de l’atteindre : il ne reste qu’à changer les DNS. Avec une adresse IP, la connexion reste chiffrée et le certificat est vérifié sur le vrai nom de domaine : s’il n’est pas encore valide (Let’s Encrypt a souvent besoin des DNS), utilisez l’URL temporaire de l’hébergeur.
+
+= Je n’ai pas d’accès FTP au nouveau serveur =
+
+Installez WordPress et Lwb Migration sur le nouveau serveur, puis ouvrez l’onglet « Importer » et choisissez l’archive exportée depuis le site source. Elle est envoyée par morceaux adaptés aux limites du serveur ; un envoi interrompu reprend là où il s’est arrêté.
 
 = Le multisite est-il pris en charge ? =
 
@@ -82,6 +98,14 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.5.0 =
+* Migration avant le changement de DNS : dans les options avancées de la migration directe, indiquez l’adresse IP du nouveau serveur (le nom de domaine, l’en-tête Host et la vérification du certificat SSL sont conservés, comme curl --resolve) ou son URL temporaire. Le site source pilote lui-même l’installeur du nouveau serveur, que le navigateur ne peut pas encore atteindre ; le site est installé avec son adresse définitive et la ligne du fichier hosts est proposée pour le vérifier avant la bascule
+* Adresse définitive imposée : pour une destination installée avec une adresse provisoire, le site est installé à l’adresse indiquée
+* Téléchargement par la destination (mode « pull ») : quand le pare-feu de la destination bloque les envois PUT et POST, la destination télécharge elle-même l’archive depuis la source, par plages (HTTP Range) reprenables, via un lien signé valable 6 h et révoqué dès la réception. En mode automatique, la bascule est faite toute seule, même en cours de transfert
+* Les requêtes de pilotage de la migration directe, sans contenu, partent en GET, rarement filtré par les pare-feux
+* Nouvel onglet « Importer » sur le site de destination, sans FTP : l’archive est envoyée depuis le navigateur par morceaux plus petits que upload_max_filesize, brouillés pour passer les pare-feux qui inspectent les envois, avec reprise après interruption ; une archive chiffrée est déchiffrée sur le serveur avec le mot de passe de l’installeur. L’installation démarre ensuite comme en migration directe, avec la base de données du site
+* Tests de bout en bout : migration vers un domaine sans DNS joint par son adresse IP, pare-feu bloquant PUT et POST, import par morceaux avec reprise et archive chiffrée
 
 = 1.4.0 =
 * Sauvegarde automatique de la destination avant l'installation : les tables remplacées sont renommées (préfixe lwbbk_), les fichiers écrasés et wp-config.php, .htaccess, .user.ini, php.ini sont mis de côté. Le bouton « Annuler : restaurer l'ancien site » remet tout en place, même après une installation interrompue. La sauvegarde est supprimée avec les fichiers d'installation

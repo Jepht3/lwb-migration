@@ -14,6 +14,11 @@
  *      autre domaine, autre dossier, autre base (créée par l'installeur) et autre préfixe.
  *   2. Migration directe serveur à serveur vers un WordPress existant (clé HMAC).
  *   3. Format de repli LWB, installation dans un sous-dossier, base contenant déjà les tables.
+ *   5. Migration directe avant le changement de DNS (domaine nouveau-site.test sans DNS,
+ *      joint par son adresse IP), pare-feu qui bloque PUT et POST : bascule automatique sur
+ *      le téléchargement par la destination, installation pilotée depuis la source.
+ *   6. Import depuis l'administration de la destination (sans FTP) : envoi par morceaux,
+ *      reprise, brouillage face à un pare-feu qui inspecte les envois, archive chiffrée.
  *
  * Les serveurs PHP tournent avec memory_limit=128M, upload_max_filesize=2M, post_max_size=3M,
  * un max_execution_time court et exec/shell_exec/proc_open désactivés.
@@ -33,7 +38,7 @@ define( 'E2E_PKG_PASSWORD', 'motdepasse-installeur-42' );
 
 // Classes autonomes de l'extension (déchiffrement de l'archive pour la contrôler).
 define( 'LWB_MIGRATION_STANDALONE', true );
-foreach ( array( 'migration-exception', 'runtime', 'archive-crypto' ) as $lwb_class ) {
+foreach ( array( 'migration-exception', 'runtime', 'archive-crypto', 'transfer-tools' ) as $lwb_class ) {
 	require_once E2E_ROOT . '/includes/class-' . $lwb_class . '.php';
 }
 
@@ -178,9 +183,10 @@ class Client {
 	public function request( $url, $post = null, $timeout_ms = 120000, $follow = false ) {
 		$ch = curl_init( $url );
 		$headers = array( 'Expect:' );
-		// Les sites « localhost:port » sont servis par 127.0.0.1 : on force la résolution.
-		if ( preg_match( '#^https?://localhost:(\d+)#', $url, $m ) ) {
-			curl_setopt( $ch, CURLOPT_RESOLVE, array( "localhost:{$m[1]}:127.0.0.1" ) );
+		// Les sites « localhost:port » et « *.test:port » (domaine sans DNS, comme un site dont
+		// les DNS ne pointent pas encore vers le nouveau serveur) sont servis par 127.0.0.1.
+		if ( preg_match( '#^https?://(localhost|[a-z0-9.-]+\.test):(\d+)#', $url, $m ) ) {
+			curl_setopt( $ch, CURLOPT_RESOLVE, array( "{$m[1]}:{$m[2]}:127.0.0.1" ) );
 		}
 		curl_setopt_array(
 			$ch,
@@ -198,7 +204,7 @@ class Client {
 		);
 		if ( null !== $post ) {
 			curl_setopt( $ch, CURLOPT_POST, true );
-			curl_setopt( $ch, CURLOPT_POSTFIELDS, is_array( $post ) ? http_build_query( $post ) : $post );
+			curl_setopt( $ch, CURLOPT_POSTFIELDS, is_array( $post ) && ! array_filter( $post, function ( $v ) { return $v instanceof CURLFile; } ) ? http_build_query( $post ) : $post );
 		}
 		$raw  = curl_exec( $ch );
 		$err  = curl_error( $ch );
@@ -418,7 +424,7 @@ function install_wp( $abspath, $url, $dbname, $prefix, $title, $extra_defines = 
 		$config .= "define( '$k', '" . bin2hex( random_bytes( 24 ) ) . "' );\n";
 	}
 	$config .= "\$table_prefix = '$prefix';\n"
-		. "define( 'WP_DEBUG', true );\ndefine( 'WP_DEBUG_DISPLAY', false );\ndefine( 'DISABLE_WP_CRON', true );\ndefine( 'AUTOMATIC_UPDATER_DISABLED', true );\ndefine( 'WP_HTTP_BLOCK_EXTERNAL', true );\ndefine( 'WP_ACCESSIBLE_HOSTS', 'localhost,127.0.0.1' );\n"
+		. "define( 'WP_DEBUG', true );\ndefine( 'WP_DEBUG_DISPLAY', false );\ndefine( 'DISABLE_WP_CRON', true );\ndefine( 'AUTOMATIC_UPDATER_DISABLED', true );\ndefine( 'WP_HTTP_BLOCK_EXTERNAL', true );\ndefine( 'WP_ACCESSIBLE_HOSTS', 'localhost,127.0.0.1,*.test' );\n"
 		. "define( 'WP_TEMP_DIR', '$abspath/wp-content/temp' );\n"
 		. $extra_defines
 		. "/* That's all, stop editing! Happy publishing. */\n"
@@ -690,7 +696,7 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 	ok( 'accents' === @file_get_contents( "$root/wp-content/uploads/été ünicode.txt" ), "$label : nom de fichier Unicode" );
 	ok( is_dir( "$root/wp-content/uploads/dossier-vide" ), "$label : dossier vide conservé" );
 	ok( is_dir( "$root/wp-content/upgrade" ), "$label : dossier temporaire wp-content/upgrade recréé" );
-	ok( ! is_dir( "$root/wp-content/plugins/lwb-migration" ) || 'direct' === $label, "$label : extension non copiée" );
+	ok( ! is_dir( "$root/wp-content/plugins/lwb-migration" ) || in_array( $label, array( 'direct', 'avant-dns', 'import' ), true ), "$label : extension non copiée" );
 	ok( is_file( "$root/wp-content/advanced-cache.php.lwb-disabled" ) && ! is_file( "$root/wp-content/advanced-cache.php" ), "$label : drop-in de cache désactivé" );
 	$cfg = file_get_contents( "$root/wp-config.php" );
 	ok( false !== strpos( $cfg, "'DB_NAME', '$dbname'" ) && false !== strpos( $cfg, "\$table_prefix = '$prefix';" ), "$label : wp-config.php (base, préfixe)" );
@@ -860,6 +866,165 @@ ok( null === scalar( $m3, "SELECT COUNT(*) FROM information_schema.TABLES WHERE 
 ok( false !== strpos( (string) file_get_contents( "$d3_abs/index.php" ), 'ancien index' ), 'restauration : fichier écrasé remis en place' );
 ok( is_file( "$d3_abs/wp-content/plugins/vieux-plugin/vieux.php" ), 'restauration : extension mise de côté remise en place' );
 $api3( 'cleanup' );
+
+/* ================================================================== */
+/* Scénario 5 : avant le changement de DNS, pare-feu bloquant PUT/POST   */
+/* ================================================================== */
+
+step( 'Scénario 5 – Avant le changement de DNS (http://nouveau-site.test:8105 joint par son IP) et pare-feu qui bloque PUT et POST' );
+$c_root = E2E_WORK . '/sitec';
+$c_url  = 'http://nouveau-site.test:8105';
+ok( 'nouveau-site.test' === gethostbyname( 'nouveau-site.test' ), 'le domaine du nouveau site n’a pas de DNS (comme avant la bascule)' );
+install_wp( $c_root, $c_url, 'lwb_e2e_c', 'cwp_', 'Site C (nouveau serveur)', "define( 'LWB_MIGRATION_ALLOW_HTTP', true );\n" );
+// Pare-feu strict (Imunify360, règle d'hébergeur…) : tout envoi PUT ou POST vers la réception est refusé.
+$waf_c = E2E_WORK . '/waf-strict.php';
+file_put_contents( $waf_c, '<?php if ( in_array( $_SERVER["REQUEST_METHOD"], array( "POST", "PUT" ), true ) && false !== strpos( $_SERVER["REQUEST_URI"], "lwb_migration_receive" ) ) { http_response_code( 403 ); echo "<html><title>403 Forbidden</title>Access denied by Imunify360 bot-protection</html>"; return true; } return false;' );
+start_server( 8105, $c_root, 6, 'c', $waf_c );
+$cc = new Client( 'c' );
+ok( $cc->wp_login( $c_url, 'admin', E2E_PASS ), 'connexion au nouveau serveur (domaine résolu vers 127.0.0.1 par le client de test uniquement)' );
+$c_nonce = $cc->nonce( $c_url );
+list( $r, $j ) = $cc->ajax( $c_url, $c_nonce, 'key_generate' );
+$key_c = $j['data']['key'];
+
+// Sans route : le domaine est injoignable depuis la source.
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'direct_start', array( 'key' => $key_c ) );
+ok( empty( $j['success'] ) && false !== strpos( $j['data']['message'], 'injoignable' ), 'sans adresse du nouveau serveur : destination injoignable (DNS)' );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'direct_start', array( 'key' => $key_c, 'via' => '127.0' ) );
+ok( empty( $j['success'] ) && false !== strpos( $j['data']['message'], 'invalide' ), 'adresse du nouveau serveur invalide refusée' );
+
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'direct_start', array( 'key' => $key_c, 'via' => '127.0.0.1', 'mode' => 'auto' ) );
+if ( empty( $j['success'] ) ) {
+	fail( 'direct_start (avant DNS) : ' . $r['body'] );
+}
+$job_c = $j['data']['job'];
+$d     = drive_job( $admin, $src_url, $nonce, $job_c );
+ok( ! empty( $d['installed'] ), 'site installé sur le nouveau serveur, piloté depuis la source (navigateur inutile)' ) || print( '    ' . json_encode( $d, JSON_UNESCAPED_UNICODE ) . "\n" );
+ok( isset( $d['hosts'] ) && '127.0.0.1 nouveau-site.test' === $d['hosts'], 'ligne du fichier hosts proposée : ' . ( isset( $d['hosts'] ) ? $d['hosts'] : '' ) );
+$log_c = (string) @file_get_contents( "$storage/packages/$job_c/log.php" );
+ok( false !== strpos( $log_c, 'adresse IP 127.0.0.1' ), 'journal : nouveau serveur joint par son adresse IP' );
+ok( false !== strpos( $log_c, 'la destination va télécharger' ), 'envoi bloqué par le pare-feu : bascule automatique sur le téléchargement par la destination' );
+ok( false !== strpos( $log_c, 'Archive téléchargée par la destination' ), 'archive téléchargée par la destination (requêtes GET, reprise par plages)' );
+ok( false === get_option_db( 'lwb_e2e_c', 'cwp_', 'lwb_migration_direct_key' ), 'clé de migration consommée (usage unique)' );
+verify_site( 'avant-dns', $c_url, $c_root, 'lwb_e2e_c', 'cwp_', $src_url, $src_abs );
+ok( E2E_SUSPECT === @file_get_contents( "$c_root/wp-content/uploads/2020/suspect.jpg" ), 'avant-dns : fichier « suspect » transféré intact' );
+ok( (int) scalar( db( 'lwb_e2e_c' ), "SELECT COUNT(*) FROM cwp_options WHERE option_value LIKE '%127.0.0.1:8105%'" ) === 0, 'avant-dns : aucune adresse IP dans la base, seulement le domaine définitif' );
+
+// Lien de téléchargement : signature obligatoire, révoqué une fois l'archive reçue.
+$forged_fetch = ( new Client( 'fetch' ) )->request( "$src_url/wp-admin/admin-ajax.php?action=lwb_migration_fetch&job=$job_c&f=archive&e=" . ( time() + 3600 ) . '&s=' . str_repeat( 'a', 64 ) );
+ok( 403 === $forged_fetch['code'] && strlen( $forged_fetch['body'] ) < 5000, 'téléchargement de l’archive refusé sans signature valide (HTTP ' . $forged_fetch['code'] . ')' );
+$state_c = (string) @file_get_contents( E2E_WORK . '/src/site/wp-content/uploads/' . basename( $storage ) . "/jobs/$job_c/state.php" );
+ok( '' !== $state_c && ! preg_match( '/"pull"\s*:/', $state_c ), 'lien de téléchargement révoqué après réception (secret supprimé)' );
+
+function get_option_db( $dbname, $prefix, $name ) {
+	return null !== scalar( db( $dbname ), "SELECT option_value FROM {$prefix}options WHERE option_name = '$name'" ) ? true : false;
+}
+
+/* ================================================================== */
+/* Scénario 6 : import depuis l'administration, sans FTP                 */
+/* ================================================================== */
+
+step( 'Scénario 6 – Import depuis l’administration de la destination (http://localhost:8106), par morceaux, archive chiffrée' );
+$i_root = E2E_WORK . '/sitei';
+$i_url  = 'http://localhost:8106';
+install_wp( $i_root, $i_url, 'lwb_e2e_i', 'iwp_', 'Site D (import)' );
+// Pare-feu qui inspecte le contenu des fichiers envoyés (cas o2switch / ModSecurity).
+$waf_i = E2E_WORK . '/waf-upload.php';
+file_put_contents( $waf_i, '<?php foreach ( $_FILES as $f ) { if ( is_uploaded_file( $f["tmp_name"] ) && false !== strpos( (string) file_get_contents( $f["tmp_name"] ), "eval(base64_decode" ) ) { http_response_code( 403 ); echo "<html><title>403 Forbidden</title>Forbidden by mod_security</html>"; return true; } } return false;' );
+start_server( 8106, $i_root, 6, 'i', $waf_i );
+$ic = new Client( 'i' );
+ok( $ic->wp_login( $i_url, 'admin', E2E_PASS ), 'connexion à l’administration de la destination' );
+$i_nonce = $ic->nonce( $i_url );
+$tab     = $ic->request( "$i_url/wp-admin/admin.php?page=lwb-migration&tab=import" );
+ok( 200 === $tab['code'] && false !== strpos( $tab['body'], 'lwbm-import-file' ), 'onglet « Importer » affiché' );
+
+/** Envoie un morceau comme le JavaScript de l'onglet « Importer ». */
+$send_chunk = function ( $id, $secret, $offset, $data, $mask = true ) use ( $ic, $i_url, $i_nonce ) {
+	$nonce = bin2hex( random_bytes( 16 ) );
+	$tmp   = E2E_WORK . '/chunk.bin';
+	file_put_contents( $tmp, $mask ? \LwbMigration\Transfer_Tools::mask( $data, $secret, $nonce ) : $data );
+	$r = $ic->request(
+		"$i_url/wp-admin/admin-ajax.php",
+		array(
+			'action' => 'lwb_migration_import_chunk',
+			'nonce'  => $i_nonce,
+			'id'     => $id,
+			'offset' => (string) $offset,
+			'n'      => $nonce,
+			'm'      => $mask ? '1' : '',
+			'chunk'  => new CURLFile( $tmp, 'application/octet-stream', 'blob' ),
+		)
+	);
+	return array( $r, json_decode( $r['body'], true ) );
+};
+
+// Pare-feu : un morceau en clair contenant un motif suspect est bloqué, brouillé il passe.
+list( $r, $j ) = $ic->ajax( $i_url, $i_nonce, 'import_init', array( 'name' => 'essai.bin', 'size' => (string) strlen( E2E_SUSPECT ) ) );
+ok( ! empty( $j['success'] ) && 2097152 === (int) $j['data']['chunk'], 'import : morceaux de 2 Mo (upload_max_filesize = 2M)' );
+list( $r ) = $send_chunk( $j['data']['id'], $j['data']['secret'], 0, E2E_SUSPECT, false );
+ok( 403 === $r['code'], 'le pare-feu bloque un envoi en clair contenant du code suspect (HTTP ' . $r['code'] . ')' );
+list( $r, $jc ) = $send_chunk( $j['data']['id'], $j['data']['secret'], 0, E2E_SUSPECT );
+ok( ! empty( $jc['success'] ) && strlen( E2E_SUSPECT ) === (int) $jc['data']['size'], 'envoi brouillé accepté par le pare-feu' );
+list( $r, $jf ) = $ic->ajax( $i_url, $i_nonce, 'import_finalize', array( 'id' => $j['data']['id'] ) );
+ok( empty( $jf['success'] ) && false !== strpos( $jf['data']['message'], 'pas une archive' ), 'fichier qui n’est pas une archive Lwb Migration refusé' );
+$ic->ajax( $i_url, $i_nonce, 'import_cancel' );
+
+// Archive chiffrée du scénario 1, envoyée par morceaux avec une interruption.
+$enc_file = E2E_WORK . '/import-' . $pkg['archive'];
+ok( 200 === $admin->download( $pkg['urls']['archive'], $enc_file ), 'archive chiffrée du scénario 1 récupérée' );
+$enc_size = filesize( $enc_file );
+$init     = function () use ( $ic, $i_url, $i_nonce, $pkg, $enc_size ) {
+	list( $r, $j ) = $ic->ajax( $i_url, $i_nonce, 'import_init', array( 'name' => $pkg['archive'], 'size' => (string) $enc_size ) );
+	if ( empty( $j['success'] ) ) {
+		fail( 'import_init : ' . $r['body'] );
+	}
+	return $j['data'];
+};
+$imp   = $init();
+$fh    = fopen( $enc_file, 'rb' );
+$sent  = 0;
+$chunk = (int) $imp['chunk'];
+for ( $i = 0; $i < 2; $i++ ) {
+	list( $r, $jc ) = $send_chunk( $imp['id'], $imp['secret'], $sent, fread( $fh, $chunk ) );
+	$sent = (int) $jc['data']['size'];
+}
+// Onglet fermé puis rouvert : même fichier → reprise.
+$imp = $init();
+ok( ! empty( $imp['resume'] ) && 2 * $chunk === (int) $imp['offset'], 'import interrompu : reprise à ' . (int) $imp['offset'] . ' octets' );
+list( $r, $jc ) = $send_chunk( $imp['id'], $imp['secret'], 0, 'morceau rejoué' );
+ok( ! empty( $jc['data']['resynced'] ) && $sent === (int) $jc['data']['size'], 'morceau rejoué : position resynchronisée' );
+$requests = 0;
+while ( $sent < $enc_size ) {
+	fseek( $fh, $sent );
+	list( $r, $jc ) = $send_chunk( $imp['id'], $imp['secret'], $sent, fread( $fh, $chunk ) );
+	if ( empty( $jc['success'] ) ) {
+		fail( 'import_chunk : HTTP ' . $r['code'] . ' ' . substr( $r['body'], 0, 300 ) );
+	}
+	$sent = (int) $jc['data']['size'];
+	++$requests;
+}
+fclose( $fh );
+ok( $sent === $enc_size, "archive envoyée en " . ( $requests + 2 ) . ' morceaux' );
+list( $r, $jf ) = $ic->ajax( $i_url, $i_nonce, 'import_finalize', array( 'id' => $imp['id'] ) );
+ok( empty( $jf['success'] ) && false !== strpos( $jf['data']['message'], 'chiffrée' ), 'archive chiffrée : mot de passe demandé' );
+list( $r, $jf ) = $ic->ajax( $i_url, $i_nonce, 'import_finalize', array( 'id' => $imp['id'], 'password' => 'mauvais-mot-de-passe' ) );
+ok( empty( $jf['success'] ) && false !== strpos( $jf['data']['message'], 'incorrect' ), 'mauvais mot de passe refusé' );
+$installer_i = '';
+for ( $i = 0; $i < 500 && '' === $installer_i; $i++ ) {
+	list( $r, $jf ) = $ic->ajax( $i_url, $i_nonce, 'import_finalize', array( 'id' => $imp['id'], 'password' => E2E_PKG_PASSWORD ) );
+	if ( empty( $jf['success'] ) ) {
+		fail( 'import_finalize : ' . $r['body'] );
+	}
+	if ( 'done' === $jf['data']['status'] ) {
+		$installer_i = $jf['data']['installer_url'];
+	}
+}
+ok( false !== strpos( $installer_i, 'lwb_token=' ), 'archive déchiffrée par étapes, installeur déposé avec un lien à usage unique' );
+ok( false !== strpos( ( new Client( 'i-anon' ) )->request( preg_replace( '/\?.*$/', '', $installer_i ) )['body'], 'Accès réservé' ), 'installeur inaccessible sans le lien' );
+$iic = new Client( 'i-installer' );
+$iic->request( $installer_i );
+list( $api_i ) = drive_installer( $iic, preg_replace( '/\?.*$/', '', $installer_i ), array() );
+verify_site( 'import', $i_url, $i_root, 'lwb_e2e_i', 'iwp_', $src_url, $src_abs );
+$api_i( 'cleanup' );
 
 /* ================================================================== */
 /* Scénario 4 : mises à jour automatiques                                */

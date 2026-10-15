@@ -463,6 +463,7 @@
 		var section = start.closest( '.lwbm-card' );
 		var panel = $( '[data-lwbm-progress]', section );
 		var result = $( '#lwbm-direct-result' );
+		var installed = $( '#lwbm-direct-installed' );
 		start.addEventListener( 'click', function () {
 			var key = $( '#lwbm-direct-key' ).value.trim();
 			if ( ! key ) {
@@ -475,7 +476,13 @@
 			notice( '' );
 			start.disabled = true;
 			result.hidden = true;
-			post( 'direct_start', { key: key } ).then( function ( res ) {
+			installed.hidden = true;
+			post( 'direct_start', {
+				key: key,
+				mode: $( '#lwbm-direct-mode' ).value,
+				via: $( '#lwbm-direct-via' ).value.trim(),
+				final_url: $( '#lwbm-direct-final' ).value.trim(),
+			} ).then( function ( res ) {
 				if ( ! res.ok ) {
 					start.disabled = false;
 					notice( res.data.message, res.data.solution );
@@ -483,6 +490,14 @@
 				}
 				var runner = new Runner( panel, res.data.job, function ( d ) {
 					start.disabled = false;
+					if ( d.installed ) {
+						// Installé avant le changement de DNS, depuis ce site.
+						$( '[data-lwbm-site]', installed ).textContent = d.site_url || '';
+						$( '[data-lwbm-hosts]', installed ).textContent = d.hosts || '';
+						$( '[data-lwbm-hosts-wrap]', installed ).hidden = ! d.hosts;
+						installed.hidden = false;
+						return;
+					}
 					$( '#lwbm-direct-open' ).href = d.installer_url;
 					result.hidden = false;
 				}, function () {
@@ -496,6 +511,248 @@
 				notice( e.message );
 			} );
 		} );
+	}
+
+	/* ------------------------------------------------------------------ */
+	/* Onglet Importer                                                     */
+	/* ------------------------------------------------------------------ */
+
+	function randomHex( bytes ) {
+		var buf = new Uint8Array( bytes );
+		window.crypto.getRandomValues( buf );
+		return Array.prototype.map.call( buf, function ( b ) { return ( '0' + b.toString( 16 ) ).slice( -2 ); } ).join( '' );
+	}
+
+	/**
+	 * Brouille un morceau comme Transfer_Tools::mask() (PHP) : XOR avec un flux de 8 Kio
+	 * dérivé du secret et de l'aléa (HMAC-SHA256). Les pare-feux qui inspectent les envois
+	 * n'y trouvent plus aucun motif. Résout avec null si WebCrypto est indisponible (page
+	 * hors HTTPS) : le morceau part alors tel quel.
+	 */
+	function maskChunk( buffer, secret, nonce ) {
+		var subtle = window.crypto && window.crypto.subtle;
+		if ( ! subtle || ! window.TextEncoder ) {
+			return Promise.resolve( null );
+		}
+		var enc = new TextEncoder();
+		var algo = { name: 'HMAC', hash: 'SHA-256' };
+		return subtle.importKey( 'raw', enc.encode( secret ), algo, false, [ 'sign' ] ).then( function ( key ) {
+			return subtle.sign( 'HMAC', key, enc.encode( 'mask|' + nonce ) );
+		} ).then( function ( seed ) {
+			return subtle.importKey( 'raw', seed, algo, false, [ 'sign' ] );
+		} ).then( function ( seedKey ) {
+			var blocks = [];
+			for ( var i = 0; i < 256; i++ ) {
+				var counter = new Uint8Array( 4 );
+				new DataView( counter.buffer ).setUint32( 0, i );
+				blocks.push( subtle.sign( 'HMAC', seedKey, counter ) );
+			}
+			return Promise.all( blocks );
+		} ).then( function ( blocks ) {
+			var stream = new Uint8Array( 8192 );
+			blocks.forEach( function ( b, i ) { stream.set( new Uint8Array( b ), i * 32 ); } );
+			var data = new Uint8Array( buffer );
+			var out = new Uint8Array( data.length );
+			for ( var j = 0; j < data.length; j++ ) {
+				out[ j ] = data[ j ] ^ stream[ j & 8191 ];
+			}
+			return out;
+		} ).catch( function () { return null; } );
+	}
+
+	function readSlice( blob ) {
+		if ( blob.arrayBuffer ) {
+			return blob.arrayBuffer();
+		}
+		return new Promise( function ( resolve, reject ) {
+			var reader = new FileReader();
+			reader.onload = function () { resolve( reader.result ); };
+			reader.onerror = function () { reject( reader.error ); };
+			reader.readAsArrayBuffer( blob );
+		} );
+	}
+
+	function initImport() {
+		var start = $( '#lwbm-import-start' );
+		if ( ! start ) {
+			return;
+		}
+		var section = start.closest( '.lwbm-card' );
+		var panel = $( '[data-lwbm-progress]', section );
+		var result = $( '#lwbm-import-result' );
+		var fileInput = $( '#lwbm-import-file' );
+		var view = { panel: panel };
+		var state = null;
+		var timer = null;
+		var started = 0;
+
+		function show( phase, label, detail, pct ) {
+			Runner.prototype.update.call( view, { phase: phase, label: label, detail: detail, progress: pct, status: 'running' } );
+		}
+
+		function stopTimer() {
+			window.clearInterval( timer );
+			$( '[data-lwbm-cancel]', panel ).hidden = true;
+		}
+
+		function failed( message, solution ) {
+			stopTimer();
+			panel.classList.add( 'is-error' );
+			start.disabled = false;
+			notice( message || __( 'Erreur inconnue.' ), solution );
+			if ( state && ! state.cancelled ) {
+				var btn = el( 'button', { type: 'button', className: 'lwbm-btn lwbm-btn-primary', text: __( 'Reprendre' ) } );
+				btn.addEventListener( 'click', function () {
+					btn.remove();
+					begin();
+				} );
+				$( '#lwbm-notice' ).appendChild( btn );
+			}
+		}
+
+		/* Appel réseau avec reprises automatiques (délai dépassé, 5xx, coupure). */
+		function call( action, fields, retries ) {
+			retries = retries || 0;
+			return post( action, fields ).catch( function ( err ) {
+				if ( ! err.retryable || retries >= MAX_RETRIES || ( state && state.cancelled ) ) {
+					throw err;
+				}
+				var delay = Math.min( 30, Math.pow( 2, retries + 1 ) );
+				$( '[data-lwbm-retry]', panel ).textContent = err.message + ' ' + __( 'Nouvelle tentative' ) + ' (' + ( retries + 1 ) + '/' + MAX_RETRIES + ') ' + __( 'dans' ) + ' ' + delay + ' s…';
+				return new Promise( function ( resolve ) { window.setTimeout( resolve, delay * 1000 ); } ).then( function () {
+					return call( action, fields, retries + 1 );
+				} );
+			} );
+		}
+
+		function sendNext() {
+			if ( state.cancelled ) {
+				return;
+			}
+			var file = state.file;
+			if ( state.offset >= file.size ) {
+				finalize();
+				return;
+			}
+			var end = Math.min( file.size, state.offset + state.chunk );
+			var nonce = randomHex( 16 );
+			readSlice( file.slice( state.offset, end ) ).then( function ( buffer ) {
+				return maskChunk( buffer, state.secret, nonce ).then( function ( masked ) {
+					return call( 'import_chunk', {
+						id: state.id,
+						offset: String( state.offset ),
+						n: nonce,
+						m: masked ? '1' : '',
+						chunk: new Blob( [ masked || buffer ], { type: 'application/octet-stream' } ),
+					} );
+				} );
+			} ).then( function ( res ) {
+				if ( ! res.ok ) {
+					failed( res.data.message, res.data.solution );
+					return;
+				}
+				$( '[data-lwbm-retry]', panel ).textContent = '';
+				state.offset = Math.min( file.size, Number( res.data.size ) || 0 );
+				var elapsed = Math.max( 1, ( Date.now() - started ) / 1000 );
+				show( 'upload', __( 'Envoi de l’archive' ), formatBytes( state.offset ) + ' / ' + formatBytes( file.size ) + ' – ' + formatBytes( ( state.offset - state.from ) / elapsed ) + '/s', 85 * state.offset / file.size );
+				sendNext();
+			} ).catch( function ( e ) {
+				failed( e.message, __( 'Vérifiez votre connexion puis cliquez sur « Reprendre » : l’envoi repartira là où il s’est arrêté.' ) );
+			} );
+		}
+
+		function finalize() {
+			show( 'decrypt', __( 'Vérification de l’archive' ), '', 86 );
+			call( 'import_finalize', { id: state.id, password: $( '#lwbm-import-password' ).value } ).then( function ( res ) {
+				if ( state.cancelled ) {
+					return;
+				}
+				if ( ! res.ok ) {
+					failed( res.data.message, res.data.solution );
+					return;
+				}
+				if ( 'decrypting' === res.data.status ) {
+					show( 'decrypt', __( 'Déchiffrement de l’archive' ), Math.round( res.data.progress ) + ' %', 86 + 0.12 * res.data.progress );
+					finalize();
+					return;
+				}
+				show( 'install', __( 'Installeur prêt' ), '', 100 );
+				stopTimer();
+				panel.classList.add( 'is-done' );
+				Runner.prototype.update.call( view, { phase: 'done', label: __( 'Terminé' ), progress: 100, status: 'done' } );
+				$( '#lwbm-import-open' ).href = res.data.installer_url;
+				result.hidden = false;
+				window.setTimeout( function () { window.location.href = res.data.installer_url; }, 1500 );
+			} ).catch( function ( e ) {
+				failed( e.message, __( 'Cliquez sur « Reprendre » : l’import repartira du dernier point de sauvegarde.' ) );
+			} );
+		}
+
+		function begin() {
+			var file = fileInput.files && fileInput.files[ 0 ];
+			if ( ! file ) {
+				notice( __( 'Choisissez d’abord l’archive à importer.' ), __( 'Fichier archive-….zip (ou .lwb, .lwbenc) téléchargé depuis l’onglet « Exporter » du site source.' ) );
+				return;
+			}
+			notice( '' );
+			start.disabled = true;
+			result.hidden = true;
+			panel.hidden = false;
+			panel.classList.remove( 'is-error', 'is-done' );
+			started = Date.now();
+			window.clearInterval( timer );
+			timer = window.setInterval( function () {
+				$( '[data-lwbm-elapsed]', panel ).textContent = __( 'Durée :' ) + ' ' + formatDuration( Date.now() - started );
+			}, 1000 );
+			var cancel = $( '[data-lwbm-cancel]', panel );
+			cancel.hidden = false;
+			cancel.onclick = function () {
+				if ( ! window.confirm( __( 'Interrompre l’envoi ? Vous pourrez le reprendre en choisissant à nouveau le même fichier.' ) ) ) {
+					return;
+				}
+				state.cancelled = true;
+				stopTimer();
+				panel.hidden = true;
+				start.disabled = false;
+			};
+			show( 'upload', __( 'Préparation de l’envoi…' ), '', 0 );
+			state = { file: file, cancelled: false };
+			call( 'import_init', { name: file.name, size: String( file.size ) } ).then( function ( res ) {
+				if ( ! res.ok ) {
+					failed( res.data.message, res.data.solution );
+					return;
+				}
+				state.id = res.data.id;
+				state.secret = res.data.secret;
+				state.chunk = Math.max( 65536, Number( res.data.chunk ) || 1048576 );
+				state.offset = Math.min( file.size, Number( res.data.offset ) || 0 );
+				state.from = state.offset;
+				if ( res.data.resume ) {
+					$( '[data-lwbm-log]', panel ).textContent = __( 'Reprise de l’envoi à' ) + ' ' + formatBytes( state.offset ) + '.';
+				}
+				sendNext();
+			} ).catch( function ( e ) {
+				failed( e.message, __( 'Rechargez la page et réessayez.' ) );
+			} );
+		}
+
+		start.addEventListener( 'click', function () {
+			if ( ! window.confirm( __( 'Ce site sera entièrement remplacé par le contenu de l’archive. Continuer ?' ) ) ) {
+				return;
+			}
+			begin();
+		} );
+	}
+
+	function formatBytes( n ) {
+		var units = [ 'o', 'Ko', 'Mo', 'Go' ];
+		var i = 0;
+		n = Number( n ) || 0;
+		while ( n >= 1024 && i < units.length - 1 ) {
+			n /= 1024;
+			i++;
+		}
+		return ( i ? n.toFixed( 1 ).replace( '.', ',' ) : String( Math.round( n ) ) ) + ' ' + units[ i ];
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -586,6 +843,7 @@
 		initUpdate();
 		initExport();
 		initDirect();
+		initImport();
 		initSettings();
 	} );
 }() );

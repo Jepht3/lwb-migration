@@ -164,6 +164,8 @@ class Exporter {
 					Direct_Transfer::send_step( $job, $rt );
 				} elseif ( 'remote' === $phase ) {
 					Direct_Transfer::remote_finalize( $job );
+				} elseif ( 'install' === $phase ) {
+					Direct_Transfer::remote_install_step( $job, $rt );
 				} else {
 					break;
 				}
@@ -558,7 +560,12 @@ class Exporter {
 			case 'remote':
 				$sent = isset( $d['transfer']['offset'] ) ? $d['transfer']['offset'] : 0;
 				$size = isset( $d['transfer']['size'] ) ? $d['transfer']['size'] : 1;
-				return round( 60 + 39 * min( 1, $sent / max( 1, $size ) ), 1 );
+				// Avant le changement de DNS, l'installation pilotée depuis ce site suit le transfert.
+				$span = empty( $d['direct']['route'] ) ? 39 : 29;
+				return round( 60 + $span * min( 1, $sent / max( 1, $size ) ), 1 );
+			case 'install':
+				$done = isset( $d['remote_install']['progress'] ) ? (float) $d['remote_install']['progress'] : 0;
+				return round( 89 + 10 * min( 1, $done / 100 ), 1 );
 			default:
 				return 100.0;
 		}
@@ -581,6 +588,7 @@ class Exporter {
 			'finalize' => __( 'Génération de l’installeur', 'lwb-migration' ),
 			'transfer' => __( 'Transfert vers le site de destination', 'lwb-migration' ),
 			'remote'   => __( 'Préparation du site de destination', 'lwb-migration' ),
+			'install'  => __( 'Installation sur le nouveau serveur', 'lwb-migration' ),
 			'done'     => __( 'Terminé', 'lwb-migration' ),
 		);
 		$detail = '';
@@ -600,8 +608,14 @@ class Exporter {
 				$detail = sprintf( __( '%1$s / %2$s fichiers archivés (%3$s)', 'lwb-migration' ), number_format_i18n( $d['files_done'] ), number_format_i18n( $d['scanner']['files'] ), Runtime::format_bytes( isset( $d['archiver']['bytes_in'] ) ? $d['archiver']['bytes_in'] : 0 ) );
 				break;
 			case 'transfer':
-				/* translators: 1: envoyé, 2: total. */
-				$detail = sprintf( __( '%1$s / %2$s envoyés', 'lwb-migration' ), Runtime::format_bytes( $d['transfer']['offset'] ), Runtime::format_bytes( $d['transfer']['size'] ) );
+				$detail = isset( $d['direct']['mode'] ) && 'pull' === $d['direct']['mode']
+					/* translators: 1: reçu, 2: total. */
+					? sprintf( __( '%1$s / %2$s téléchargés par la destination', 'lwb-migration' ), Runtime::format_bytes( $d['transfer']['offset'] ), Runtime::format_bytes( $d['transfer']['size'] ) )
+					/* translators: 1: envoyé, 2: total. */
+					: sprintf( __( '%1$s / %2$s envoyés', 'lwb-migration' ), Runtime::format_bytes( $d['transfer']['offset'] ), Runtime::format_bytes( $d['transfer']['size'] ) );
+				break;
+			case 'install':
+				$detail = isset( $d['remote_install']['detail'] ) ? (string) $d['remote_install']['detail'] : '';
 				break;
 		}
 		$out = array(
@@ -615,6 +629,14 @@ class Exporter {
 		);
 		if ( 'done' === $d['phase'] && ! empty( $d['remote_result'] ) ) {
 			$out['installer_url'] = $d['remote_result']['installer_url'];
+			if ( ! empty( $d['remote_result']['installed'] ) ) {
+				// Installé avant le changement de DNS : il reste à faire pointer le domaine.
+				$route            = isset( $d['direct']['route'] ) ? $d['direct']['route'] : null;
+				$site             = ! empty( $d['direct']['final_url'] ) ? $d['direct']['final_url'] : $d['direct']['site_url'];
+				$out['installed'] = true;
+				$out['site_url']  = $site;
+				$out['hosts']     = Route::hosts_line( $route, $site );
+			}
 		}
 		return $out;
 	}

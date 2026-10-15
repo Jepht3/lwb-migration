@@ -15,6 +15,7 @@ $lwbm_update = \LwbMigration\Updater::status();
 $lwbm_icons  = array(
 	'export'   => 'dashicons-download',
 	'direct'   => 'dashicons-cloud-upload',
+	'import'   => 'dashicons-upload',
 	'settings' => 'dashicons-admin-generic',
 );
 ?>

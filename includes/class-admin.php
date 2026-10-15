@@ -105,7 +105,7 @@ class Admin {
 	private static function current_tab() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- simple navigation.
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'export';
-		return in_array( $tab, array( 'export', 'direct', 'settings' ), true ) ? $tab : 'export';
+		return in_array( $tab, array( 'export', 'direct', 'import', 'settings' ), true ) ? $tab : 'export';
 	}
 
 	/**
@@ -121,6 +121,7 @@ class Admin {
 		$tabs  = array(
 			'export'   => __( 'Exporter', 'lwb-migration' ),
 			'direct'   => __( 'Migration directe', 'lwb-migration' ),
+			'import'   => __( 'Importer', 'lwb-migration' ),
 			'settings' => __( 'Paramètres', 'lwb-migration' ),
 		);
 		$error = '';

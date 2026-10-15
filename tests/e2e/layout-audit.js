@@ -47,6 +47,10 @@ function fillStates(key) {
 	const kt = $('#lwbm-key-box textarea, #lwbm-key-box .lwbm-code, #lwbm-key-box code');
 	if (kt) { if ('value' in kt && kt.tagName === 'TEXTAREA') kt.value = key; else kt.textContent = key; }
 	const dk = $('#lwbm-direct-key'); if (dk) dk.value = key;
+	$$('details.lwbm-advanced').forEach((d) => (d.open = true));
+	const via = $('#lwbm-direct-via'); if (via) via.value = 'https://serveur-mutualise-42.hebergeur-exemple.fr/~compte-client';
+	$$('[data-lwbm-site]').forEach((s) => (s.textContent = 'https://www.exemple-destination-tres-longue.fr'));
+	$$('[data-lwbm-hosts]').forEach((s) => (s.textContent = '203.0.113.10 www.exemple-destination-tres-longue.fr'));
 	$$('[data-lwbm-password]').forEach((c) => (c.textContent = 'Xk7#pQ2v-Lm9$Rt4-Wz8!'));
 	$$('[data-lwbm-update-state]').forEach((s) => (s.lastChild.textContent = ' Version 1.2.1 – à jour'));
 	// Bandeau d'une autre extension (comme « Laisser un avis » chez l'utilisateur).
@@ -179,7 +183,7 @@ function fillInstaller() {
 		await login.fill('#user_pass', b);
 		await Promise.all([login.waitForNavigation(), login.click('#wp-submit')]);
 		const state = await ctx.storageState();
-		for (const tab of ['export', 'direct', 'settings']) {
+		for (const tab of ['export', 'direct', 'import', 'settings']) {
 			await run(tab, { storageState: state }, async (p) => {
 				await p.goto(`${url}/wp-admin/admin.php?page=lwb-migration&tab=${tab}`);
 				await p.waitForTimeout(600);

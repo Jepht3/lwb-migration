@@ -21,3 +21,4 @@ if ( is_string( $lwb_migration_key ) && preg_match( '/^[a-f0-9]{20}$/', $lwb_mig
 delete_option( 'lwb_migration_settings' );
 delete_option( 'lwb_migration_storage_key' );
 delete_option( 'lwb_migration_direct_key' );
+delete_option( 'lwb_migration_import' );

@@ -5,6 +5,7 @@
  * @package LwbMigration
  *
  * @var bool $lwbm_direct Afficher les étapes de transfert.
+ * @var bool $lwbm_import Étapes de l'import depuis l'administration.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -18,6 +19,14 @@ $lwbm_steps = array(
 if ( ! empty( $lwbm_direct ) ) {
 	$lwbm_steps['transfer'] = __( 'Transfert', 'lwb-migration' );
 	$lwbm_steps['remote']   = __( 'Destination', 'lwb-migration' );
+	$lwbm_steps['install']  = __( 'Installation', 'lwb-migration' );
+}
+if ( ! empty( $lwbm_import ) ) {
+	$lwbm_steps = array(
+		'upload'  => __( 'Envoi', 'lwb-migration' ),
+		'decrypt' => __( 'Déchiffrement', 'lwb-migration' ),
+		'install' => __( 'Installeur', 'lwb-migration' ),
+	);
 }
 ?>
 <div class="lwbm-progress" data-lwbm-progress hidden>

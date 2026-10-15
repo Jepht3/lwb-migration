@@ -50,7 +50,7 @@
 	<!-- Les classes autonomes (aussi intégrées à installer.php) n'ont pas accès aux fonctions WordPress :
 	     fopen/fread/json_encode y sont indispensables (lecture en flux, sans WP_Filesystem). -->
 	<rule ref="WordPress.WP.AlternativeFunctions">
-		<exclude-pattern>/includes/class-(archiver|archive-reader|archive-crypto|db-dumper|sql-importer|json-store|logger|file-scanner|job|runtime|search-replace|mysqli-db)\.php</exclude-pattern>
+		<exclude-pattern>/includes/class-(archiver|archive-reader|archive-crypto|db-dumper|sql-importer|json-store|logger|file-scanner|job|runtime|search-replace|mysqli-db|route|transfer-tools)\.php</exclude-pattern>
 		<exclude-pattern>/installer/*</exclude-pattern>
 	</rule>
 	<!-- Nom de fichier imposé par le cahier des charges. -->

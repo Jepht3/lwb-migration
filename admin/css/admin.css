@@ -156,6 +156,13 @@
 .lwbm .lwbm-input-sm { width: 100px; }
 .lwbm .lwbm-select { min-width: 280px; max-width: 100%; }
 .lwbm .lwbm-code { display: block; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; background: var(--lwbm-subtle); margin-bottom: 14px; }
+.lwbm .lwbm-input-wide { width: 100%; }
+.lwbm .lwbm-file { display: block; width: 100%; max-width: 100%; padding: 14px; border: 1px dashed var(--lwbm-line); border-radius: 12px; background: var(--lwbm-subtle); color: var(--lwbm-ink); }
+.lwbm-advanced { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--lwbm-line); border-radius: 12px; background: var(--lwbm-subtle); }
+.lwbm-advanced > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--lwbm-ink); }
+.lwbm-advanced[open] > summary { margin-bottom: 14px; }
+.lwbm-advanced .lwbm-field:last-child { margin-bottom: 0; }
+.lwbm-result code { word-break: break-all; }
 
 /* ---------- Boutons ---------- */
 .lwbm-btn {

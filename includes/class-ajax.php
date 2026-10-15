@@ -24,9 +24,16 @@ class Ajax {
 		foreach ( $actions as $action ) {
 			add_action( 'wp_ajax_lwb_migration_' . $action, array( __CLASS__, $action ) );
 		}
+		// Import depuis l'administration (onglet « Importer »).
+		foreach ( array( 'import_init', 'import_chunk', 'import_finalize', 'import_cancel' ) as $action ) {
+			add_action( 'wp_ajax_lwb_migration_' . $action, array( Upload_Import::class, $action ) );
+		}
 		// Réception de la migration directe : appel de serveur à serveur, authentifié par HMAC.
 		add_action( 'wp_ajax_nopriv_lwb_migration_receive', array( Direct_Transfer::class, 'handle_receive' ) );
 		add_action( 'wp_ajax_lwb_migration_receive', array( Direct_Transfer::class, 'handle_receive' ) );
+		// Téléchargement de l'archive par la destination (mode « pull ») : lien signé.
+		add_action( 'wp_ajax_nopriv_lwb_migration_fetch', array( Direct_Transfer::class, 'handle_fetch' ) );
+		add_action( 'wp_ajax_lwb_migration_fetch', array( Direct_Transfer::class, 'handle_fetch' ) );
 	}
 
 	/**
@@ -292,13 +299,32 @@ class Ajax {
 	 * Démarre une migration directe (côté source).
 	 *
 	 * @return void
+	 * @throws Migration_Exception Adresse définitive invalide (interceptée et renvoyée en JSON).
 	 */
 	public static function direct_start() {
 		Security::check_ajax();
 		try {
 			$remote = Direct_Transfer::parse_key( Security::post_raw( 'key' ) );
-			$info   = Direct_Transfer::hello( $remote );
-			$job    = Exporter::start(
+
+			// Avant le changement de DNS : adresse IP ou URL temporaire du nouveau serveur.
+			$route = Route::parse( Security::post_text( 'via' ), $remote['url'], Direct_Transfer::allow_http() );
+			if ( null !== $route ) {
+				$remote['route'] = $route;
+			}
+			$final = trim( Security::post_text( 'final_url' ) );
+			if ( '' !== $final ) {
+				if ( ! preg_match( '#^https?://[^\s/?\#]+[^\s?\#]*$#i', $final ) ) {
+					throw new Migration_Exception(
+						__( 'Adresse définitive du site invalide.', 'lwb-migration' ),
+						__( 'Saisissez une URL complète, par exemple https://www.mon-site.fr, ou laissez le champ vide.', 'lwb-migration' )
+					);
+				}
+				$remote['final_url'] = untrailingslashit( esc_url_raw( $final ) );
+			}
+			$mode           = Security::post_text( 'mode', 'auto' );
+			$remote['mode'] = in_array( $mode, array( 'auto', 'push', 'pull' ), true ) ? $mode : 'auto';
+			$info           = Direct_Transfer::hello( $remote );
+			$job            = Exporter::start(
 				array(
 					'password' => '',
 					'direct'   => array_merge(
@@ -310,7 +336,16 @@ class Ajax {
 					),
 				)
 			);
-			$job->logger()->info( sprintf( 'Migration directe vers %s (WordPress %s, PHP %s).', $info['site_url'], $info['wp_version'], $info['php_version'] ) );
+			$job->logger()->info( sprintf( 'Migration directe vers %s (WordPress %s, PHP %s, Lwb Migration %s).', $info['site_url'], $info['wp_version'], $info['php_version'], isset( $info['plugin_version'] ) ? $info['plugin_version'] : '?' ) );
+			$modes = array(
+				'auto' => 'automatique (envoi par la source, téléchargement par la destination si le pare-feu bloque)',
+				'push' => 'envoi par la source',
+				'pull' => 'téléchargement par la destination',
+			);
+			$job->logger()->info( 'Mode de transfert : ' . $modes[ $remote['mode'] ] . '.' );
+			if ( ! empty( $remote['final_url'] ) ) {
+				$job->logger()->info( 'Adresse définitive du site : ' . $remote['final_url'] . '.' );
+			}
 			wp_send_json_success(
 				array_merge(
 					array(
