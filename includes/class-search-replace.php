@@ -570,7 +570,10 @@ class Search_Replace {
 		$or = array();
 		foreach ( $columns as $col ) {
 			foreach ( $this->needles as $needle ) {
-				$or[] = Db::ident( $col ) . " LIKE '%" . Db::escape( Db::like_escape( $needle ) ) . "%'";
+				// Caractère d'échappement « | » : l'antislash des URL échappées en JSON (http:\/\/)
+				// reste un caractère ordinaire (MySQL 5.7 ne trouvait pas « \\ » dans un motif LIKE).
+				$pattern = str_replace( array( '|', '%', '_' ), array( '||', '|%', '|_' ), $needle );
+				$or[]    = Db::ident( $col ) . " LIKE '%" . Db::escape( $pattern ) . "%' ESCAPE '|'";
 			}
 		}
 		return '(' . implode( ' OR ', $or ) . ')';

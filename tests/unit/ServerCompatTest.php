@@ -110,6 +110,21 @@ class ServerCompatTest extends TestCase {
 		}
 	}
 
+	public function test_json_escaped_urls_are_found_by_the_sql_filter() {
+		$db = $this->create_db();
+		$db->query( 'CREATE TABLE wp_postmeta (meta_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, meta_value LONGTEXT) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci' );
+		$db->query( "INSERT INTO wp_postmeta (meta_value) VALUES ('" . \LwbMigration\Db::escape( json_encode( array( 'link' => 'http://old.test/site/contact', 'pct' => '100%_x|y' ) ) ) . "')" );
+		$sr    = new \LwbMigration\Search_Replace( \LwbMigration\Search_Replace::build_pairs( array( 'http://old.test/site' => 'https://new.test' ), array() ) );
+		$state = array();
+		$guard = 0;
+		while ( ! $sr->run_table( $db, 'wp_postmeta', $state, new Runtime( 5 ) ) && $guard++ < 10 ) {
+			continue;
+		}
+		$value = json_decode( (string) $db->get_var( 'SELECT meta_value FROM wp_postmeta' ), true );
+		$this->assertSame( 'https://new.test/contact', $value['link'], 'URL échappée en JSON (http:\/\/) remplacée sur tous les serveurs.' );
+		$this->assertSame( '100%_x|y', $value['pct'] );
+	}
+
 	public function test_views_are_listed_but_not_exported() {
 		$db = $this->create_db();
 		$db->query( 'CREATE TABLE wp_posts (ID INT NOT NULL PRIMARY KEY, post_title TEXT)' );

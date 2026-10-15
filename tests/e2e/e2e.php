@@ -1242,7 +1242,7 @@ foreach ( glob( E2E_WORK . '/php-*.log' ) as $log ) {
 foreach ( array_slice( array_unique( $issues ), 0, 20 ) as $line ) {
 	echo "    $line\n";
 }
-ok( empty( $issues ), 'aucun avertissement PHP de l’extension ni de l’installeur' );
+ok( empty( $issues ), 'aucun avertissement PHP de l’extension ni de l’installeur' . ( $issues ? ' – ' . substr( implode( ' ¶ ', array_slice( array_unique( $issues ), 0, 3 ) ), 0, 900 ) : '' ) );
 
 foreach ( $servers as $s ) {
 	proc_terminate( $s );
