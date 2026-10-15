@@ -160,8 +160,6 @@ function start_server( $port, $docroot, $max_exec, $name, $router = null ) {
 		}
 		array_splice( $cmd, 1, 0, array( '-d', 'open_basedir=' . implode( PATH_SEPARATOR, $allowed ), '-d', 'upload_tmp_dir=' . E2E_WORK . "/tmp-$name", '-d', 'sys_temp_dir=/tmp' ) );
 	}
-	$cmd = array_merge( $cmd, array(
-	);
 	if ( $router ) {
 		$cmd[] = $router;
 	}
