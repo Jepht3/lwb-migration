@@ -76,6 +76,7 @@ jobs:
           - { php: '8.4', db: 'mariadb:11.4', label: 'MariaDB 11.4', server: 'builtin', basedir: '', setup: '' }
           - { php: '8.4', db: 'mysql:5.7', label: 'MySQL 5.7 (index 767 octets)', server: 'builtin', basedir: '', setup: "SET GLOBAL innodb_default_row_format = 'COMPACT'; SET GLOBAL innodb_large_prefix = OFF; SET GLOBAL innodb_file_format = 'Antelope';" }
           - { php: '8.4', db: 'mysql:8.0', label: 'MySQL 8.0 (sql_require_primary_key)', server: 'builtin', basedir: '', setup: 'SET GLOBAL sql_require_primary_key = ON;' }
+          - { php: '8.4', db: 'mariadb:10.11', label: 'nginx + php-fpm', server: 'nginx', basedir: '', setup: '' }
           - { php: '8.4', db: 'mariadb:10.11', label: 'open_basedir', server: 'builtin', basedir: '1', setup: '' }
     services:
       db:

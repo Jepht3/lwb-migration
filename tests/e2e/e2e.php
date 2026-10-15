@@ -137,6 +137,10 @@ function scalar( mysqli $m, $sql ) {
 function start_server( $port, $docroot, $max_exec, $name, $router = null ) {
 	global $servers;
 	$log = E2E_WORK . "/php-$name.log";
+	if ( 'nginx' === getenv( 'LWB_E2E_SERVER' ) ) {
+		start_nginx( $port, $docroot, $max_exec, $name, $router );
+		return;
+	}
 	$cmd = array(
 		PHP_BINARY,
 		'-d', 'memory_limit=128M',
@@ -176,6 +180,64 @@ function start_server( $port, $docroot, $max_exec, $name, $router = null ) {
 		usleep( 100000 );
 	}
 	fail( "serveur $name ($port) non démarré" );
+}
+
+/**
+ * Même serveur, servi par nginx + php-fpm (hébergements sans Apache : .htaccess ignoré,
+ * fichiers statiques servis par nginx, PHP par FastCGI).
+ */
+function start_nginx( $port, $docroot, $max_exec, $name, $router = null ) {
+	global $servers;
+	$fpm_bin   = getenv( 'LWB_E2E_FPM' ) ?: '/usr/sbin/php-fpm' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+	$nginx_bin = getenv( 'LWB_E2E_NGINX' ) ?: '/usr/sbin/nginx';
+	$dir       = E2E_WORK . "/nginx-$name";
+	$log       = E2E_WORK . "/php-$name.log";
+	$sock      = "$dir/fpm.sock";
+	foreach ( array( '', '/body', '/fastcgi', '/proxy', '/uwsgi', '/scgi' ) as $sub ) {
+		@mkdir( $dir . $sub, 0755, true );
+	}
+	$pool = "[global]\npid = $dir/fpm.pid\nerror_log = $dir/fpm.err\ndaemonize = no\n\n[www]\nlisten = $sock\npm = static\npm.max_children = 4\nclear_env = no\ncatch_workers_output = yes\n"
+		. "php_admin_value[memory_limit] = 128M\nphp_admin_value[max_execution_time] = $max_exec\nphp_admin_value[upload_max_filesize] = 2M\nphp_admin_value[post_max_size] = 3M\n"
+		. "php_admin_value[disable_functions] = exec,shell_exec,system,passthru,proc_open,popen,pcntl_exec\nphp_admin_flag[display_errors] = off\nphp_admin_flag[log_errors] = on\n"
+		. "php_admin_value[error_log] = $log\nphp_admin_value[error_reporting] = " . E_ALL . "\nenv[LWB_MIGRATION_STEP_BUDGET] = 0.25\n";
+	if ( $router ) {
+		// Pas de routeur avec nginx : le même script est exécuté avant chaque requête PHP.
+		file_put_contents( "$dir/prepend.php", "<?php\nif ( true === ( include " . var_export( $router, true ) . " ) ) {\n\texit;\n}\n" );
+		$pool .= "php_admin_value[auto_prepend_file] = $dir/prepend.php\n";
+	}
+	file_put_contents( "$dir/fpm.conf", $pool );
+	$params = '';
+	foreach ( array( 'QUERY_STRING' => '$query_string', 'REQUEST_METHOD' => '$request_method', 'CONTENT_TYPE' => '$content_type', 'CONTENT_LENGTH' => '$content_length', 'SCRIPT_NAME' => '$fastcgi_script_name', 'SCRIPT_FILENAME' => '$document_root$fastcgi_script_name', 'REQUEST_URI' => '$request_uri', 'DOCUMENT_URI' => '$document_uri', 'DOCUMENT_ROOT' => '$document_root', 'SERVER_PROTOCOL' => '$server_protocol', 'REQUEST_SCHEME' => '$scheme', 'GATEWAY_INTERFACE' => 'CGI/1.1', 'SERVER_SOFTWARE' => 'nginx/$nginx_version', 'REMOTE_ADDR' => '$remote_addr', 'REMOTE_PORT' => '$remote_port', 'SERVER_ADDR' => '$server_addr', 'SERVER_PORT' => '$server_port', 'SERVER_NAME' => '$host', 'REDIRECT_STATUS' => '200' ) as $k => $v ) {
+		$params .= "\t\t\tfastcgi_param $k $v;\n";
+	}
+	$conf = "worker_processes 1;\npid $dir/nginx.pid;\nerror_log $dir/error.log;\nevents { worker_connections 256; }\nhttp {\n"
+		. "\taccess_log off;\n\tclient_body_temp_path $dir/body;\n\tfastcgi_temp_path $dir/fastcgi;\n\tproxy_temp_path $dir/proxy;\n\tuwsgi_temp_path $dir/uwsgi;\n\tscgi_temp_path $dir/scgi;\n"
+		. "\tclient_max_body_size 16m;\n\tdefault_type application/octet-stream;\n\ttypes { text/html html; text/css css; application/javascript js; image/png png; image/jpeg jpg; application/json json; application/zip zip; }\n"
+		. "\tserver {\n\t\tlisten 127.0.0.1:$port;\n\t\troot $docroot;\n\t\tindex index.php index.html;\n"
+		. "\t\tlocation / { try_files \$uri \$uri/ =404; }\n"
+		. "\t\tlocation ~ \\.php\$ {\n\t\t\ttry_files \$uri =404;\n\t\t\tfastcgi_pass unix:$sock;\n\t\t\tfastcgi_read_timeout 300;\n$params\t\t}\n\t}\n}\n";
+	file_put_contents( "$dir/nginx.conf", $conf );
+
+	// php-fpm avec la configuration de PHP en ligne de commande (mêmes extensions).
+	$env = array_merge( getenv(), array( 'PHP_INI_SCAN_DIR' => PHP_CONFIG_FILE_SCAN_DIR ) );
+	$cmd = array( $fpm_bin, '-y', "$dir/fpm.conf", '-F' );
+	if ( php_ini_loaded_file() ) {
+		array_splice( $cmd, 1, 0, array( '-c', php_ini_loaded_file() ) );
+	}
+	$out                    = array( 0 => array( 'pipe', 'r' ), 1 => array( 'file', E2E_WORK . "/server-$name.out", 'a' ), 2 => array( 'file', E2E_WORK . "/server-$name.out", 'a' ) );
+	$servers[ "$name-fpm" ] = proc_open( $cmd, $out, $pipes, null, $env );
+	$servers[ $name ]       = proc_open( array( $nginx_bin, '-p', $dir, '-c', "$dir/nginx.conf", '-e', "$dir/error.log", '-g', 'daemon off;' ), $out, $pipes2, null, $env );
+	for ( $i = 0; $i < 80; $i++ ) {
+		$s = @fsockopen( '127.0.0.1', $port );
+		if ( $s ) {
+			fclose( $s );
+			if ( file_exists( $sock ) ) {
+				return;
+			}
+		}
+		usleep( 100000 );
+	}
+	fail( "nginx/php-fpm $name ($port) non démarré : " . @file_get_contents( E2E_WORK . "/server-$name.out" ) . @file_get_contents( "$dir/error.log" ) . @file_get_contents( "$dir/fpm.err" ) );
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,6 +425,10 @@ function drive_installer( Client $c, $url, array $form, $expect_auth = null ) {
 	ok( ! empty( $status['ok'] ), 'installeur : état lu' );
 	$errors = array_filter( $status['checks'], function ( $c ) { return 'error' === $c['level']; } );
 	ok( empty( $errors ), 'installeur : aucune vérification bloquante ' . json_encode( array_values( $errors ), JSON_UNESCAPED_UNICODE ) );
+	if ( getenv( 'LWB_E2E_OPEN_BASEDIR' ) ) {
+		$labels = array_column( $status['checks'], 'level', 'label' );
+		ok( isset( $labels['Restriction open_basedir'] ) && 'ok' === $labels['Restriction open_basedir'], 'installeur : restriction open_basedir détectée, dossier du site autorisé' );
+	}
 	$form = array_merge( $status['defaults'], $form );
 	unset( $form['path'] );
 	$test = $api( 'test_db', $form );
@@ -624,9 +690,18 @@ mkdir( $dst_root );
 // CSS Elementor de l'ancien site de destination, au même nom qu'un fichier du site source.
 mkdir( "$dst_root/wp-content/uploads/elementor/css", 0755, true );
 file_put_contents( "$dst_root/wp-content/uploads/elementor/css/post-1.css", '.ancien-site{}' );
+// Extension « must-use » et drop-in de l'hébergeur de destination : à ne jamais écraser.
+define( 'E2E_DST_MU', "<?php\n// Kinsta (destination).\n" );
+define( 'E2E_DST_DROPIN', "<?php\n// Pantheon (destination).\n" );
+mkdir( "$dst_root/wp-content/mu-plugins", 0755, true );
+file_put_contents( "$dst_root/wp-content/mu-plugins/kinsta-mu-plugins.php", E2E_DST_MU );
+file_put_contents( "$dst_root/wp-content/db-error.php", E2E_DST_DROPIN );
 ok( 200 === $admin->download( $pkg['urls']['archive'], "$dst_root/{$pkg['archive']}" ), 'archive téléchargée' );
 ok( 200 === $admin->download( $pkg['urls']['installer'], "$dst_root/installer.php" ), 'installer.php téléchargé' );
 ok( 200 === $admin->download( $pkg['urls']['log'], E2E_WORK . '/export-log.txt' ) && false !== strpos( file_get_contents( E2E_WORK . '/export-log.txt' ), 'Paquet prêt' ), 'journal d’export téléchargeable' );
+$export_log = (string) file_get_contents( E2E_WORK . '/export-log.txt' );
+ok( false !== strpos( $export_log, 'vue(s) SQL non exportée(s) : srcwp_vue_titres' ), 'journal d’export : vue SQL signalée' );
+ok( false !== strpos( $export_log, 'propres à l’hébergeur exclus' ), 'journal d’export : fichiers de l’hébergeur exclus' );
 $anon_dl = ( new Client( 'x' ) )->request( $pkg['urls']['archive'] );
 ok( in_array( $anon_dl['code'], array( 400, 403 ), true ) && strlen( $anon_dl['body'] ) < 1000, 'téléchargement refusé sans session (HTTP ' . $anon_dl['code'] . ')' );
 
@@ -656,6 +731,8 @@ $has = function ( $needle ) use ( $names ) {
 ok( $has( 'database.sql' ) && $has( 'lwb-package.json' ) && $has( 'files/wp-config.php' ), 'archive : base, manifeste, wp-config' );
 ok( ! $has( 'wp-content/cache/' ) && ! $has( 'node_modules' ) && ! $has( 'debug.log' ) && ! $has( 'updraft' ), 'exclusions par défaut appliquées (cache, node_modules, journaux, sauvegardes)' );
 ok( ! $has( 'plugins/lwb-migration' ) && ! $has( 'lwb-migration-' ), 'l’extension et son stockage sont exclus' );
+ok( ! $has( 'mu-plugins/wpengine-common' ) && ! $has( 'mu-plugins/kinsta-mu-plugins.php' ) && ! $has( 'wp-content/db-error.php' ), 'extensions « must-use » et drop-in des hébergeurs exclus' );
+ok( $has( 'mu-plugins/mon-mu-plugin.php' ), 'extension « must-use » du site conservée' );
 
 step( 'Scénario 1 – Installation sur http://localhost:8102 (autre dossier, base créée par l’installeur, préfixe newwp_)' );
 mysql_root()->query( 'DROP DATABASE IF EXISTS lwb_e2e_dst' );
@@ -714,6 +791,12 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 	ok( null !== scalar( $m, "SELECT option_value FROM {$prefix}options WHERE option_name = '{$prefix}user_roles'" ), "$label : rôles au nouveau préfixe" );
 	ok( '50' === scalar( $m, "SELECT COUNT(*) FROM {$prefix}custom" ), "$label : table personnalisée (clé composite + binaire) importée" );
 	ok( "$url/nokey" === scalar( $m, "SELECT url FROM {$prefix}nokey" ), "$label : table sans clé primaire traitée" );
+	if ( getenv( 'LWB_E2E_REQUIRE_PK' ) ) {
+		ok( 'lwb_row_id' === scalar( $m, "SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = '$dbname' AND TABLE_NAME = '{$prefix}nokey' AND CONSTRAINT_NAME = 'PRIMARY'" ), "$label : clé primaire ajoutée (sql_require_primary_key)" );
+	}
+	ok( '20' === scalar( $m, "SELECT COUNT(*) FROM {$prefix}longkey" ) && 'clé-7' === scalar( $m, "SELECT k FROM {$prefix}longkey WHERE id = 7" ), "$label : table à index long importée" );
+	ok( 'innodb' === strtolower( (string) scalar( $m, "SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = '$dbname' AND TABLE_NAME = '{$prefix}longkey'" ) ), "$label : table MyISAM convertie en InnoDB" );
+	ok( null === scalar( $m, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '$dbname' AND TABLE_NAME = '{$prefix}vue_titres' HAVING COUNT(*) > 0" ), "$label : vue non migrée" );
 	ok( null === scalar( $m, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '$dbname' AND TABLE_NAME = 'foreign_table' HAVING COUNT(*) > 0" ), "$label : table hors préfixe non migrée" );
 
 	// 3) Fichiers.
@@ -751,6 +834,9 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 }
 
 verify_site( 'export', $dst_url, $dst_root, 'lwb_e2e_dst', 'newwp_', $src_url, $src_abs );
+ok( E2E_DST_MU === @file_get_contents( "$dst_root/wp-content/mu-plugins/kinsta-mu-plugins.php" ) && E2E_DST_DROPIN === @file_get_contents( "$dst_root/wp-content/db-error.php" ), 'fichiers de l’hébergeur de destination intacts' );
+ok( ! is_dir( "$dst_root/wp-content/mu-plugins/wpengine-common" ) && is_file( "$dst_root/wp-content/mu-plugins/mon-mu-plugin.php" ), 'extensions « must-use » : celles du site installées, pas celles de l’ancien hébergeur' );
+ok( '644' === substr( sprintf( '%o', fileperms( "$dst_root/wp-content/uploads/été ünicode.txt" ) ), -3 ) && '755' === substr( sprintf( '%o', fileperms( "$dst_root/wp-content/uploads/dossier-vide" ) ), -3 ), 'permissions 0644 / 0755 appliquées' );
 
 $clean = $api( 'cleanup' );
 ok( ! empty( $clean['ok'] ) && "$dst_url/wp-admin/" === $clean['redirect'], 'bouton « Supprimer les fichiers d’installation » → redirection wp-admin' );
