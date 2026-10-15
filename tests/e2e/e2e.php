@@ -405,8 +405,9 @@ function drive_installer( Client $c, $url, array $form, $expect_auth = null ) {
 		ok( empty( $bad['ok'] ) && false !== strpos( $bad['message'], 'incorrect' ), 'mauvais mot de passe refusé' );
 		$noauth = json_decode( $c->request( $url, array( 'lwb_action' => 'status', 'csrf' => 'x' ) )['body'], true );
 		ok( empty( $noauth['ok'] ), 'API refusée sans authentification' );
-		$good = json_decode( $c->request( $url, array( 'lwb_action' => 'login', 'password' => $expect_auth ) )['body'], true );
-		ok( ! empty( $good['ok'] ), 'bon mot de passe accepté' );
+		$raw  = $c->request( $url, array( 'lwb_action' => 'login', 'password' => $expect_auth ) );
+		$good = json_decode( $raw['body'], true );
+		ok( ! empty( $good['ok'] ), 'bon mot de passe accepté (HTTP ' . $raw['code'] . ' : ' . substr( preg_replace( '/\s+/', ' ', strip_tags( (string) $raw['body'] ) ), 0, 300 ) . ')' );
 		$page = $c->request( $url );
 	}
 	if ( ! preg_match( '/window\.LWB = (\{.*?\});/', $page['body'], $m ) ) {
