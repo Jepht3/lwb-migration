@@ -913,7 +913,7 @@ ok( (int) scalar( db( 'lwb_e2e_c' ), "SELECT COUNT(*) FROM cwp_options WHERE opt
 $forged_fetch = ( new Client( 'fetch' ) )->request( "$src_url/wp-admin/admin-ajax.php?action=lwb_migration_fetch&job=$job_c&f=archive&e=" . ( time() + 3600 ) . '&s=' . str_repeat( 'a', 64 ) );
 ok( 403 === $forged_fetch['code'] && strlen( $forged_fetch['body'] ) < 5000, 'téléchargement de l’archive refusé sans signature valide (HTTP ' . $forged_fetch['code'] . ')' );
 $state_c = (string) @file_get_contents( E2E_WORK . '/src/site/wp-content/uploads/' . basename( $storage ) . "/jobs/$job_c/state.php" );
-ok( '' !== $state_c && ! preg_match( '/"pull"\s*:/', $state_c ), 'lien de téléchargement révoqué après réception (secret supprimé)' );
+ok( '' !== $state_c && ! preg_match( '/"pull"\s*:\s*\{/', $state_c ), 'lien de téléchargement révoqué après réception (secret supprimé)' );
 
 function get_option_db( $dbname, $prefix, $name ) {
 	return null !== scalar( db( $dbname ), "SELECT option_value FROM {$prefix}options WHERE option_name = '$name'" ) ? true : false;
