@@ -820,6 +820,10 @@ function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path
 	// 4) Le site fonctionne.
 	$c    = new Client( "verify-$label" );
 	$home = $c->request( "$url/" );
+	if ( 0 === $home['code'] ) {
+		// Connexion coupée (aucune réponse HTTP) : une seconde tentative.
+		$home = $c->request( "$url/" );
+	}
 	ok( 200 === $home['code'] && false !== strpos( $home['body'], 'Site Source LWB' ), "$label : page d’accueil HTTP 200 (obtenu : HTTP {$home['code']})" ) || print( '    ' . substr( preg_replace( '/\s+/', ' ', strip_tags( $home['body'] ) ), 0, 400 ) . "\n" );
 	if ( 200 !== $home['code'] && getenv( 'GITHUB_ACTIONS' ) ) {
 		echo '::error::' . $label . ' : réponse de la page d’accueil : ' . substr( preg_replace( '/\s+/', ' ', strip_tags( (string) $home['body'] ) ), 0, 600 ) . "\n";
