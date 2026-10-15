@@ -62,6 +62,20 @@ class Sql_Importer {
 	private $persist;
 
 	/**
+	 * Valeur de max_allowed_packet du serveur (octets).
+	 *
+	 * @var int
+	 */
+	private $max_packet = 0;
+
+	/**
+	 * Version du serveur.
+	 *
+	 * @var string
+	 */
+	private $version = '';
+
+	/**
 	 * Constructeur.
 	 *
 	 * @param Db            $db      Connexion.
@@ -89,6 +103,12 @@ class Sql_Importer {
 				'table_offset' => 0,
 				'dirty'        => false,
 				'done'         => false,
+				// Conversion MyISAM/Aria → InnoDB demandée.
+				'innodb'       => false,
+				// Adaptations faites : tables converties, clés primaires ajoutées, index raccourcis.
+				'converted'    => array(),
+				'fixes'        => array(),
+				'split'        => 0,
 			),
 			$state
 		);
@@ -122,6 +142,10 @@ class Sql_Importer {
 		$this->db->query( 'SET SESSION foreign_key_checks = 0' );
 		$this->db->query( 'SET SESSION unique_checks = 0' );
 		$this->db->query( "SET SESSION time_zone = '+00:00'" );
+		// Taille réelle autorisée par le serveur : les INSERT plus gros sont découpés.
+		$packet           = (int) $this->db->get_var( 'SELECT @@max_allowed_packet' );
+		$this->max_packet = $packet > 0 ? $packet : 1048576;
+		$this->version    = (string) $this->db->get_var( 'SELECT VERSION()' );
 		if ( null === $this->state['collations'] ) {
 			$this->state['collations'] = $this->detect_collation_map();
 		}
@@ -236,7 +260,8 @@ class Sql_Importer {
 			return;
 		}
 		++$this->state['queries'];
-		if ( $this->db->query( $sql ) ) {
+		$ok = Sql_Compat::is_create_table( $sql ) ? $this->create_table( $sql ) : $this->run_statement( $sql );
+		if ( $ok ) {
 			return;
 		}
 		$errno = $this->db->last_errno();
@@ -251,6 +276,113 @@ class Sql_Importer {
 		++$this->state['errors'];
 		if ( $this->logger ) {
 			$this->logger->error( sprintf( 'Requête SQL en échec (%d : %s) : %s', $errno, $error, substr( $sql, 0, 300 ) ) );
+		}
+	}
+
+	/**
+	 * Exécute une instruction, découpée si elle dépasse max_allowed_packet.
+	 *
+	 * @param string $sql Instruction.
+	 * @return bool
+	 */
+	private function run_statement( $sql ) {
+		$limit = $this->max_packet - 1024;
+		if ( $limit > 0 && strlen( $sql ) > $limit ) {
+			$pieces = Sql_Compat::split_insert( $sql, $limit );
+			if ( count( $pieces ) > 1 ) {
+				++$this->state['split'];
+				foreach ( $pieces as $piece ) {
+					if ( ! $this->db->query( $piece ) ) {
+						return false;
+					}
+				}
+				return true;
+			}
+		}
+		return $this->db->query( $sql );
+	}
+
+	/**
+	 * Crée une table en l'adaptant au serveur.
+	 *
+	 * Conversion InnoDB demandée : appliquée d'emblée (moteur d'origine conservé si InnoDB
+	 * refuse la table). Puis, selon l'erreur du serveur : clé primaire ajoutée
+	 * (sql_require_primary_key, innodb_force_primary_key), index raccourcis (limite de
+	 * 767 octets), conversion InnoDB (moteur Aria ou MyISAM indisponible).
+	 *
+	 * @param string $sql CREATE TABLE.
+	 * @return bool
+	 */
+	private function create_table( $sql ) {
+		$table    = preg_match( '/^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`((?:[^`]|``)+)`/i', $sql, $m ) ? str_replace( '``', '`', $m[1] ) : '';
+		$original = $sql;
+		$attempt  = $sql;
+		$fixes    = array();
+		$reverted = false;
+		if ( ! empty( $this->state['innodb'] ) && Sql_Compat::is_myisam_like( $sql ) ) {
+			$attempt = Sql_Compat::convert_engine( $sql );
+			$fixes[] = 'innodb';
+		}
+		for ( $i = 0; $i < 6; $i++ ) {
+			if ( $this->db->query( $attempt ) ) {
+				$this->record_fixes( $table, array_unique( $fixes ) );
+				return true;
+			}
+			$errno  = $this->db->last_errno();
+			$limits = Sql_Compat::index_limits_from_error( $this->db->last_error(), $attempt );
+			$next   = null;
+			$fix    = '';
+			if ( in_array( $errno, array( 3750, 1173 ), true ) && ! Sql_Compat::has_primary_key( $attempt ) ) {
+				$next = Sql_Compat::add_primary_key( $attempt, Sql_Compat::supports_invisible( $this->version ) );
+				$fix  = 'pk';
+			} elseif ( null !== $limits ) {
+				$next = Sql_Compat::shorten_indexes( $attempt, $limits[0], $limits[1] );
+				$fix  = 'index';
+			} elseif ( ! $reverted && Sql_Compat::is_myisam_like( $attempt ) ) {
+				$next = Sql_Compat::convert_engine( $attempt ); // Moteur indisponible ou options Aria refusées.
+				$fix  = 'innodb';
+			} elseif ( ! $reverted && in_array( 'innodb', $fixes, true ) ) {
+				$next     = $original; // InnoDB refuse cette table : moteur d'origine.
+				$fixes    = array();
+				$reverted = true;
+			}
+			if ( null === $next || $next === $attempt ) {
+				return false;
+			}
+			if ( '' !== $fix ) {
+				$fixes[] = $fix;
+			}
+			$attempt = $next;
+		}
+		return false;
+	}
+
+	/**
+	 * Mémorise (et journalise) les adaptations d'une table.
+	 *
+	 * @param string   $table Table.
+	 * @param string[] $fixes Adaptations : innodb, pk, index.
+	 * @return void
+	 */
+	private function record_fixes( $table, array $fixes ) {
+		$labels = array(
+			'pk'    => 'clé primaire ajoutée (le serveur l’exige)',
+			'index' => 'index raccourcis (longueur maximale du serveur)',
+		);
+		foreach ( $fixes as $fix ) {
+			if ( 'innodb' === $fix ) {
+				if ( ! in_array( $table, $this->state['converted'], true ) ) {
+					$this->state['converted'][] = $table;
+				}
+				continue;
+			}
+			$line = sprintf( 'Table %s : %s.', $table, $labels[ $fix ] );
+			if ( ! in_array( $line, $this->state['fixes'], true ) ) {
+				$this->state['fixes'][] = $line;
+				if ( $this->logger ) {
+					$this->logger->info( $line );
+				}
+			}
 		}
 	}
 

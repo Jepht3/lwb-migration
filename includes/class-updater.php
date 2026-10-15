@@ -355,7 +355,8 @@ class Updater {
 		if ( ! function_exists( 'download_url' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 		}
-		$file = download_url( $package, 300 );
+		// open_basedir : jamais de fichier temporaire hors des dossiers autorisés.
+		$file = defined( 'WP_TEMP_DIR' ) || Host_Compat::path_allowed( sys_get_temp_dir() ) ? download_url( $package, 300 ) : self::download_within_basedir( $package );
 		if ( is_wp_error( $file ) ) {
 			return $file;
 		}
@@ -366,6 +367,37 @@ class Updater {
 				'lwb_migration_checksum',
 				__( 'Lwb Migration : le fichier de mise à jour téléchargé est corrompu (empreinte SHA-256 invalide). Réessayez plus tard.', 'lwb-migration' )
 			);
+		}
+		return $file;
+	}
+
+	/**
+	 * Télécharge le paquet dans un dossier autorisé par open_basedir (stockage de l'extension).
+	 *
+	 * @param string $package URL du paquet.
+	 * @return string|\WP_Error Fichier téléchargé.
+	 */
+	private static function download_within_basedir( $package ) {
+		try {
+			$dir = Host_Compat::temp_dir( array( Security::storage_dir( 'tmp' ) ) );
+		} catch ( Migration_Exception $e ) {
+			$dir = '';
+		}
+		if ( '' === $dir ) {
+			return new \WP_Error( 'lwb_migration_temp', __( 'Lwb Migration : aucun dossier temporaire accessible en écriture (restriction open_basedir). Définissez WP_TEMP_DIR dans wp-config.php.', 'lwb-migration' ) );
+		}
+		$file  = $dir . '/update-' . Runtime::random_hex( 12 ) . '.zip';
+		$reply = wp_safe_remote_get(
+			$package,
+			array(
+				'timeout'  => 300,
+				'stream'   => true,
+				'filename' => $file,
+			)
+		);
+		if ( is_wp_error( $reply ) || 200 !== (int) wp_remote_retrieve_response_code( $reply ) ) {
+			wp_delete_file( $file );
+			return is_wp_error( $reply ) ? $reply : new \WP_Error( 'http_404', trim( wp_remote_retrieve_response_message( $reply ) ) );
 		}
 		return $file;
 	}

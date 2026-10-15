@@ -53,7 +53,11 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase {
 		$server->query( 'CREATE DATABASE `' . $name . '` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci' );
 		$server->close();
 		$this->databases[] = $name;
-		return new Mysqli_Db( $host, $user, $pass, $name );
+		$db                = new Mysqli_Db( $host, $user, $pass, $name );
+		// Serveur de CI avec sql_require_primary_key=ON : les jeux d'essai créent aussi des tables
+		// sans clé primaire (l'importeur, lui, doit s'en sortir sans ce privilège).
+		$db->query( 'SET SESSION sql_require_primary_key = 0' );
+		return $db;
 	}
 
 	protected function tearDown(): void {

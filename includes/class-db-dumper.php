@@ -83,6 +83,7 @@ class Db_Dumper {
 				'batch'       => 1000,
 				'header'      => false,
 				'done'        => false,
+				'views'       => array(),
 			),
 			$state
 		);
@@ -111,6 +112,9 @@ class Db_Dumper {
 		$this->state['tables']     = $tables;
 		$this->state['estimates']  = $est;
 		$this->state['rows_total'] = max( 1, $total );
+		// Vues : non exportées (leur DEFINER et leurs requêtes dépendent du serveur source),
+		// mais signalées pour être recréées à la main sur la destination.
+		$this->state['views'] = array_values( array_diff( $this->db->list_views( $prefix ), $exclude ) );
 	}
 
 	/**

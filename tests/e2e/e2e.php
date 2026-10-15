@@ -113,6 +113,7 @@ function mysql_root() {
 		fail( 'MySQL indisponible : ' . $m->connect_error );
 	}
 	$m->set_charset( 'utf8mb4' );
+	$m->query( 'SET SESSION sql_require_primary_key = 0' ); // Préparation des jeux d'essai (sans effet ailleurs).
 	return $m;
 }
 function db( $name ) {
@@ -149,6 +150,17 @@ function start_server( $port, $docroot, $max_exec, $name, $router = null ) {
 		'-d', 'error_reporting=' . E_ALL,
 		'-S', "127.0.0.1:$port",
 		'-t', $docroot,
+	);
+	if ( getenv( 'LWB_E2E_OPEN_BASEDIR' ) ) {
+		// open_basedir : site + dossier temporaire du site ; le dossier temporaire système reste interdit.
+		@mkdir( E2E_WORK . "/tmp-$name", 0755, true );
+		$allowed = array( $docroot, E2E_WORK . "/tmp-$name" );
+		if ( $router ) {
+			$allowed[] = $router;
+		}
+		array_splice( $cmd, 1, 0, array( '-d', 'open_basedir=' . implode( PATH_SEPARATOR, $allowed ), '-d', 'upload_tmp_dir=' . E2E_WORK . "/tmp-$name", '-d', 'sys_temp_dir=/tmp' ) );
+	}
+	$cmd = array_merge( $cmd, array(
 	);
 	if ( $router ) {
 		$cmd[] = $router;
@@ -518,9 +530,25 @@ update_option( 'lwb_double', serialize( array( 'inner' => $url . '/double' ) ) )
 
 // Table personnalisée (clé composite, binaire, sans clé primaire) et table hors préfixe.
 global $wpdb;
+if ( $wpdb->get_var( "SHOW VARIABLES LIKE 'sql_require_primary_key'" ) ) {
+	$wpdb->query( 'SET SESSION sql_require_primary_key = 0' ); // Serveur strict : la source, elle, a des tables sans clé.
+}
 $wpdb->query( "CREATE TABLE {$wpdb->prefix}custom (a INT, b INT, url TEXT, bin BLOB, PRIMARY KEY (a, b)) DEFAULT CHARSET=utf8mb4" );
 $wpdb->query( "CREATE TABLE {$wpdb->prefix}nokey (url TEXT) DEFAULT CHARSET=utf8mb4" );
 $wpdb->query( "CREATE TABLE foreign_table (id INT)" );
+// Table MyISAM à index unique de 960 octets : au-delà de la limite InnoDB COMPACT (767).
+$wpdb->query( "CREATE TABLE {$wpdb->prefix}longkey (id INT NOT NULL PRIMARY KEY, k VARCHAR(240) NOT NULL, UNIQUE KEY k (k)) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4" );
+for ( $i = 1; $i <= 20; $i++ ) {
+	$wpdb->insert( "{$wpdb->prefix}longkey", array( 'id' => $i, 'k' => "clé-$i" ) );
+}
+// Vue SQL : non exportée, mais signalée dans le journal.
+$wpdb->query( "CREATE VIEW {$wpdb->prefix}vue_titres AS SELECT ID, post_title FROM {$wpdb->prefix}posts" );
+// Extensions « must-use » et drop-in d'hébergeurs (WP Engine, Kinsta) : jamais exportés.
+wp_mkdir_p( WP_CONTENT_DIR . '/mu-plugins/wpengine-common' );
+file_put_contents( WP_CONTENT_DIR . '/mu-plugins/wpengine-common/plugin.php', "<?php\n// WP Engine (test).\n" );
+file_put_contents( WP_CONTENT_DIR . '/mu-plugins/kinsta-mu-plugins.php', "<?php\n// Kinsta (test).\n" );
+file_put_contents( WP_CONTENT_DIR . '/mu-plugins/mon-mu-plugin.php', "<?php\n// Extension « must-use » du site.\n" );
+file_put_contents( WP_CONTENT_DIR . '/db-error.php', "<?php\n// Page d'erreur WP Engine (test).\n" );
 for ( $i = 0; $i < 50; $i++ ) {
 	$wpdb->insert( "{$wpdb->prefix}custom", array( 'a' => $i % 5, 'b' => $i, 'url' => "$url/c/$i", 'bin' => random_bytes( 64 ) ) );
 }

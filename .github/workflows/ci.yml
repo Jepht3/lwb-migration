@@ -7,21 +7,30 @@ on:
 
 jobs:
   tests:
-    name: PHP ${{ matrix.php }}
+    name: PHP ${{ matrix.php }} – ${{ matrix.label }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: ['7.4', '8.4']
+        include:
+          - { php: '7.4', db: 'mariadb:10.11', label: 'MariaDB 10.11', setup: '' }
+          - { php: '8.4', db: 'mariadb:10.11', label: 'MariaDB 10.11', setup: '' }
+          - { php: '8.4', db: 'mariadb:10.4', label: 'MariaDB 10.4', setup: '' }
+          - { php: '8.4', db: 'mariadb:11.4', label: 'MariaDB 11.4', setup: '' }
+          # MySQL 5.7 au format de lignes COMPACT : index limités à 767 octets (comme MySQL 5.6).
+          - { php: '8.4', db: 'mysql:5.7', label: 'MySQL 5.7 (index 767 octets)', setup: "SET GLOBAL innodb_default_row_format = 'COMPACT'; SET GLOBAL innodb_large_prefix = OFF; SET GLOBAL innodb_file_format = 'Antelope';" }
+          # Bases gérées (DigitalOcean, Azure, PlanetScale) : clé primaire obligatoire.
+          - { php: '8.4', db: 'mysql:8.0', label: 'MySQL 8.0 (sql_require_primary_key)', setup: 'SET GLOBAL sql_require_primary_key = ON;' }
     services:
-      mariadb:
-        image: mariadb:10.11
+      db:
+        image: ${{ matrix.db }}
         env:
           MARIADB_ROOT_PASSWORD: root
+          MYSQL_ROOT_PASSWORD: root
         ports: ['3306:3306']
         options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=5s --health-timeout=5s --health-retries=30
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot || mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=40
     env:
       LWB_TEST_DB_HOST: 127.0.0.1
       LWB_TEST_DB_USER: root
@@ -34,33 +43,57 @@ jobs:
           extensions: mysqli, zip, zlib, sodium
           coverage: none
           tools: cs2pr
+      - name: Réglages du serveur de base de données
+        if: matrix.setup != ''
+        run: mysql -h 127.0.0.1 -uroot -proot -e "${{ matrix.setup }}"
       - run: composer install --no-interaction --no-progress
       - name: Standards WordPress + compatibilité PHP 7.4–8.4
         run: vendor/bin/phpcs -q --report=checkstyle | cs2pr
       - name: Tests unitaires
-        run: vendor/bin/phpunit
+        run: vendor/bin/phpunit --log-junit junit.xml
         timeout-minutes: 5
+      - name: Échecs des tests en annotations
+        if: failure()
+        run: |
+          php -r '
+            if ( ! is_file( "junit.xml" ) ) { exit( 0 ); }
+            $x = simplexml_load_file( "junit.xml" );
+            foreach ( $x->xpath( "//testcase[failure or error]" ) as $t ) {
+              $f = $t->failure ? $t->failure : $t->error;
+              echo "::error title=" . $t["class"] . "::" . $t["name"] . " – " . substr( str_replace( array( "\r", "\n" ), " ¶ ", (string) $f ), 0, 1500 ) . "\n";
+            }'
 
   e2e:
-    name: Bout en bout (WordPress réel, PHP ${{ matrix.php }})
+    name: Bout en bout – PHP ${{ matrix.php }}, ${{ matrix.label }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        php: ['7.4', '8.4']
+        include:
+          - { php: '7.4', db: 'mariadb:10.11', label: 'MariaDB 10.11', server: 'builtin', basedir: '', setup: '' }
+          - { php: '8.4', db: 'mariadb:10.11', label: 'MariaDB 10.11', server: 'builtin', basedir: '', setup: '' }
+          - { php: '8.4', db: 'mariadb:10.4', label: 'MariaDB 10.4', server: 'builtin', basedir: '', setup: '' }
+          - { php: '8.4', db: 'mariadb:11.4', label: 'MariaDB 11.4', server: 'builtin', basedir: '', setup: '' }
+          - { php: '8.4', db: 'mysql:5.7', label: 'MySQL 5.7 (index 767 octets)', server: 'builtin', basedir: '', setup: "SET GLOBAL innodb_default_row_format = 'COMPACT'; SET GLOBAL innodb_large_prefix = OFF; SET GLOBAL innodb_file_format = 'Antelope';" }
+          - { php: '8.4', db: 'mysql:8.0', label: 'MySQL 8.0 (sql_require_primary_key)', server: 'builtin', basedir: '', setup: 'SET GLOBAL sql_require_primary_key = ON;' }
+          - { php: '8.4', db: 'mariadb:10.11', label: 'open_basedir', server: 'builtin', basedir: '1', setup: '' }
     services:
-      mariadb:
-        image: mariadb:10.11
+      db:
+        image: ${{ matrix.db }}
         env:
           MARIADB_ROOT_PASSWORD: root
+          MYSQL_ROOT_PASSWORD: root
         ports: ['3306:3306']
         options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=5s --health-timeout=5s --health-retries=30
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot || mariadb-admin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=40
     env:
       LWB_E2E_DB_HOST: 127.0.0.1
       LWB_E2E_DB_USER: root
       LWB_E2E_DB_PASSWORD: root
+      LWB_E2E_SERVER: ${{ matrix.server }}
+      LWB_E2E_OPEN_BASEDIR: ${{ matrix.basedir }}
+      LWB_E2E_REQUIRE_PK: ${{ contains(matrix.setup, 'sql_require_primary_key') && '1' || '' }}
     steps:
       - uses: actions/checkout@v5
       - uses: shivammathur/setup-php@v2
@@ -68,6 +101,18 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: mysqli, zip, zlib, curl, sodium, openssl
           coverage: none
+      - name: Réglages du serveur de base de données
+        if: matrix.setup != ''
+        run: mysql -h 127.0.0.1 -uroot -proot -e "${{ matrix.setup }}"
+      - name: nginx et php-fpm
+        if: matrix.server == 'nginx'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q nginx
+          command -v php-fpm${{ matrix.php }} || sudo apt-get install -y -q php${{ matrix.php }}-fpm
+          sudo systemctl stop nginx || true
+          echo "LWB_E2E_FPM=$(command -v php-fpm${{ matrix.php }} || echo /usr/sbin/php-fpm${{ matrix.php }})" >> "$GITHUB_ENV"
+          echo "LWB_E2E_NGINX=$(command -v nginx || echo /usr/sbin/nginx)" >> "$GITHUB_ENV"
       - name: Scénarios complets (export, installeur, migration directe, avant DNS, pull, import, format LWB, mises à jour)
         run: php tests/e2e/e2e.php
         timeout-minutes: 45

@@ -188,7 +188,28 @@ abstract class Db {
 	 * @return string[]
 	 */
 	public function list_tables( $prefix = '' ) {
-		$sql = "SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'";
+		return $this->list_by_type( 'BASE TABLE', $prefix );
+	}
+
+	/**
+	 * Liste les vues, éventuellement filtrées par préfixe (non exportées : voir Db_Dumper).
+	 *
+	 * @param string $prefix Préfixe ('' pour toutes).
+	 * @return string[]
+	 */
+	public function list_views( $prefix = '' ) {
+		return $this->list_by_type( 'VIEW', $prefix );
+	}
+
+	/**
+	 * Liste les objets d'un type (BASE TABLE, VIEW).
+	 *
+	 * @param string $type   Type.
+	 * @param string $prefix Préfixe ('' pour tous).
+	 * @return string[]
+	 */
+	private function list_by_type( $type, $prefix ) {
+		$sql = 'SHOW FULL TABLES WHERE Table_type = ' . self::literal( $type );
 		$out = array();
 		foreach ( (array) $this->get_rows( $sql ) as $row ) {
 			$name = (string) $row[0];

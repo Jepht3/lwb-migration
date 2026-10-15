@@ -163,6 +163,26 @@ class Settings {
 	}
 
 	/**
+	 * Fichiers propres à l'hébergeur du site source (WP Engine, Kinsta, GoDaddy, Pantheon…).
+	 *
+	 * @return string[] Chemins absolus.
+	 */
+	public static function host_excluded_paths() {
+		$content = untrailingslashit( wp_normalize_path( WP_CONTENT_DIR ) );
+		$paths   = Host_Compat::host_paths( $content );
+		$mu      = defined( 'WPMU_PLUGIN_DIR' ) ? untrailingslashit( wp_normalize_path( WPMU_PLUGIN_DIR ) ) : $content . '/mu-plugins';
+		if ( $content . '/mu-plugins' !== $mu && is_dir( $mu ) ) {
+			// Dossier mu-plugins déplacé hors de wp-content.
+			foreach ( (array) scandir( $mu ) as $item ) {
+				if ( '.' !== $item && '..' !== $item && Host_Compat::is_host_mu_plugin( $item, Host_Compat::head( $mu . '/' . $item ) ) ) {
+					$paths[] = $mu . '/' . $item;
+				}
+			}
+		}
+		return $paths;
+	}
+
+	/**
 	 * Règles d'exclusion complètes pour un export.
 	 *
 	 * @param array  $settings Réglages.
@@ -176,6 +196,8 @@ class Settings {
 			untrailingslashit( wp_normalize_path( LWB_MIGRATION_DIR ) ),
 		);
 		$names = array();
+		// Extensions « must-use » et drop-ins de l'hébergeur : toujours exclus (inutilisables ailleurs).
+		$paths = array_merge( $paths, self::host_excluded_paths() );
 		if ( $settings['default_exclude'] ) {
 			$paths = array_merge( $paths, self::default_excluded_paths() );
 			$names = self::default_excluded_names();

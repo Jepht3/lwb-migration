@@ -146,6 +146,72 @@ class InstallerBuilderTest extends TestCase {
 		$this->assertStringNotContainsString( $secret, $json );
 	}
 
+	private function status( $dir, array $server = array() ) {
+		$cookie = $this->auth_cookie();
+		$json   = $this->run_installer(
+			$dir,
+			$server,
+			array( 'lwb_installer_auth' => $cookie ),
+			array(
+				'lwb_action' => 'status',
+				'csrf'       => hash_hmac( 'sha256', 'csrf|' . $cookie, self::SECRET ),
+			)
+		);
+		$data = json_decode( $json, true );
+		$this->assertIsArray( $data, $json );
+		return array( $data, $json );
+	}
+
+	public function test_env_based_wp_config_is_read_and_kept_by_default() {
+		$dir = $this->tmp_dir();
+		file_put_contents(
+			$dir . '/wp-config.php',
+			"<?php\ndefine( 'DB_NAME', getenv( 'DB_NAME' ) );\ndefine( 'DB_USER', getenv( 'DB_USER' ) );\ndefine( 'DB_PASSWORD', getenv( 'DB_PASSWORD' ) );\ndefine( 'DB_HOST', getenv( 'DB_HOST' ) );\n\$table_prefix = getenv( 'DB_PREFIX' ) ?: 'env_';\nrequire_once ABSPATH . 'wp-settings.php';\n"
+		);
+		file_put_contents( $dir . '/.env', "DB_NAME=base_env\nDB_USER=user_env\nDB_PASSWORD='Secret-Env-42'\nDB_HOST=db.env:3307\n" );
+		Installer_Builder::build( $dir . '/installer.php', $this->config() );
+
+		list( $data, $json ) = $this->status( $dir );
+		$this->assertSame( 'base_env', $data['defaults']['name'] );
+		$this->assertSame( 'user_env', $data['defaults']['user'] );
+		$this->assertSame( 'db.env:3307', $data['defaults']['host'] );
+		$this->assertSame( 'env_', $data['defaults']['prefix'] );
+		$this->assertTrue( $data['defaults']['keep_config'], 'Configuration par environnement : conservée par défaut.' );
+		$this->assertTrue( $data['defaults']['innodb'] );
+		$this->assertTrue( $data['config_exists'] );
+		$this->assertTrue( $data['password_saved'] );
+		$this->assertStringNotContainsString( 'Secret-Env-42', $json );
+		$this->assertContains( 'Configuration existante', array_column( $data['checks'], 'label' ) );
+	}
+
+	public function test_classic_wp_config_is_not_kept_by_default() {
+		$dir = $this->tmp_dir();
+		file_put_contents( $dir . '/wp-config.php', "<?php\ndefine( 'DB_NAME', 'base' );\ndefine( 'DB_USER', 'u' );\ndefine( 'DB_PASSWORD', 'p' );\n\$table_prefix = 'cl_';\n" );
+		Installer_Builder::build( $dir . '/installer.php', $this->config() );
+		list( $data ) = $this->status( $dir );
+		$this->assertSame( 'base', $data['defaults']['name'] );
+		$this->assertSame( 'cl_', $data['defaults']['prefix'] );
+		$this->assertFalse( $data['defaults']['keep_config'] );
+		$this->assertTrue( $data['config_exists'] );
+	}
+
+	public function test_proxy_https_and_iis_are_detected() {
+		$dir = $this->tmp_dir();
+		Installer_Builder::build( $dir . '/installer.php', $this->config() );
+		list( $data ) = $this->status(
+			$dir,
+			array(
+				'HTTP_CF_VISITOR' => '{"scheme":"https"}',
+				'SERVER_SOFTWARE' => 'Microsoft-IIS/10.0',
+			)
+		);
+		$checks = array_column( $data['checks'], 'value', 'label' );
+		$this->assertSame( 'HTTPS (via un proxy)', $checks['Connexion'] );
+		$this->assertSame( 'IIS', $checks['Serveur web'] );
+		$this->assertStringStartsWith( 'https://b.test', $data['defaults']['site_url'] );
+		$this->assertFalse( $data['config_exists'] );
+	}
+
 	public function test_wrong_passwords_are_limited_per_ip_address() {
 		$dir = $this->tmp_dir();
 		Installer_Builder::build( $dir . '/installer.php', $this->config() );

@@ -113,8 +113,12 @@ class Exporter {
 			$scanner->add_root( $content, 'files/wp-content' );
 			$log->info( 'Dossier wp-content situé hors de la racine : il sera restauré dans /wp-content.' );
 		}
+		$host_files = Settings::host_excluded_paths();
+		if ( ! empty( $host_files ) ) {
+			$log->info( 'Fichiers propres à l’hébergeur exclus (extensions « must-use », drop-ins) : ' . implode( ', ', array_map( 'basename', $host_files ) ) . '.' );
+		}
 		$parent_config = dirname( $abspath ) . '/wp-config.php';
-		if ( ! is_file( $abspath . '/wp-config.php' ) && is_file( $parent_config ) && ! is_file( dirname( $abspath ) . '/wp-settings.php' ) ) {
+		if ( ! is_file( $abspath . '/wp-config.php' ) && Host_Compat::path_allowed( $parent_config ) && is_file( $parent_config ) && ! is_file( dirname( $abspath ) . '/wp-settings.php' ) ) {
 			$scanner->add_single_file( $parent_config, 'files/wp-config.php' );
 			$log->info( 'wp-config.php situé au-dessus de la racine : il sera restauré à la racine.' );
 		}
@@ -126,6 +130,10 @@ class Exporter {
 		$log->info( sprintf( '%d tables à exporter (≈ %s lignes).', count( $job->data['dumper']['tables'] ), number_format_i18n( $job->data['dumper']['rows_total'] ) ) );
 		if ( ! empty( $settings['exclude_tables'] ) ) {
 			$log->info( 'Tables exclues : ' . implode( ', ', $settings['exclude_tables'] ) );
+		}
+		if ( ! empty( $job->data['dumper']['views'] ) ) {
+			$log->warning( sprintf( '%d vue(s) SQL non exportée(s) : %s. Recréez-les sur la destination après la migration (leur définition dépend du serveur source).', count( $job->data['dumper']['views'] ), implode( ', ', $job->data['dumper']['views'] ) ) );
+			++$job->data['warnings'];
 		}
 		$job->save();
 		return $job;

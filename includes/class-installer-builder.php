@@ -39,6 +39,8 @@ class Installer_Builder {
 		'class-json-store.php',
 		'class-logger.php',
 		'class-db.php',
+		'class-sql-compat.php',
+		'class-host-compat.php',
 		'class-mysqli-db.php',
 		'class-archiver.php',
 		'class-archive-crypto.php',

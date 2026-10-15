@@ -40,7 +40,7 @@ class Installer {
 	const MANUAL_TTL    = 604800;
 	const TOKEN_GRACE   = 600;
 	const BACKUP_PREFIX = 'lwbbk_';
-	const BACKUP_CONFIG = array( 'wp-config.php', '.htaccess', '.user.ini', 'php.ini' );
+	const BACKUP_CONFIG = array( 'wp-config.php', '.htaccess', 'web.config', '.user.ini', 'php.ini' );
 	const PHASES        = array( 'decrypt', 'extract', 'import', 'replace', 'finalize' );
 	const DROPINS       = array( 'advanced-cache.php', 'object-cache.php' );
 	const SALT_KEYS     = array( 'AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT' );
@@ -580,8 +580,8 @@ class Installer {
 		if ( ! empty( $_SERVER['HTTPS'] ) && 'off' !== strtolower( (string) $_SERVER['HTTPS'] ) ) {
 			return true;
 		}
-		if ( isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && 'https' === strtolower( (string) $_SERVER['HTTP_X_FORWARDED_PROTO'] ) ) {
-			return true;
+		if ( Host_Compat::proxy_says_https( $_SERVER ) ) {
+			return true; // Cloudflare, répartiteur de charge.
 		}
 		return isset( $_SERVER['SERVER_PORT'] ) && 443 === (int) $_SERVER['SERVER_PORT'];
 	}
@@ -635,12 +635,8 @@ class Installer {
 	 * @return array
 	 */
 	private function existing_db_config() {
-		$file = $this->root . '/wp-config.php';
-		if ( ! is_file( $file ) ) {
-			$file = dirname( $this->root ) . '/wp-config.php';
-		}
-		$text = is_file( $file ) ? (string) @file_get_contents( $file ) : '';
-		if ( '' === $text || false !== strpos( $text, 'LWB_MIGRATION_STANDALONE' ) ) {
+		$text = $this->destination_config_text();
+		if ( '' === $text ) {
 			return array();
 		}
 		$out = array();
@@ -658,7 +654,69 @@ class Installer {
 		if ( preg_match( '/\$table_prefix\s*=\s*([\'"])((?:(?!\1)[^\\\\]|\\\\.)*)\1\s*;/', $text, $m ) ) {
 			$out['prefix'] = stripcslashes( $m[2] );
 		}
+		if ( Host_Compat::config_uses_env( $text ) ) {
+			// Bedrock, Pantheon, Platform.sh, Docker : accès lus dans l'environnement ou un .env.
+			$env = $this->environment();
+			$out = array_merge( Host_Compat::env_db_config( $env ), $out );
+			$pre = Host_Compat::table_prefix( $text, $env );
+			if ( null !== $pre ) {
+				$out['prefix'] = $pre;
+			}
+			$out['env'] = true;
+		}
 		return $out;
+	}
+
+	/**
+	 * Fichier wp-config.php existant sur la destination ('' si absent).
+	 *
+	 * @return string
+	 */
+	private function destination_config_file() {
+		$file = $this->root . '/wp-config.php';
+		if ( is_file( $file ) ) {
+			return $file;
+		}
+		// Au-dessus de la racine (emplacement permis par WordPress), si open_basedir l'autorise.
+		$parent = dirname( $this->root ) . '/wp-config.php';
+		if ( Host_Compat::path_allowed( $parent ) && is_file( $parent ) && ! is_file( dirname( $this->root ) . '/wp-settings.php' ) ) {
+			return $parent;
+		}
+		return '';
+	}
+
+	/**
+	 * Contenu du wp-config.php existant de la destination ('' si absent ou laissé par une
+	 * installation interrompue).
+	 *
+	 * @return string
+	 */
+	private function destination_config_text() {
+		$file = $this->destination_config_file();
+		$text = '' !== $file ? (string) @file_get_contents( $file ) : '';
+		return false !== strpos( $text, 'LWB_MIGRATION_STANDALONE' ) ? '' : $text;
+	}
+
+	/**
+	 * Variables d'environnement, complétées par le fichier .env (racine ou dossier parent).
+	 *
+	 * @return array<string,string>
+	 */
+	private function environment() {
+		$env = array();
+		foreach ( array( dirname( $this->root ) . '/.env', $this->root . '/.env' ) as $file ) {
+			if ( Host_Compat::path_allowed( $file ) && is_file( $file ) ) {
+				$env = array_merge( $env, Host_Compat::parse_dotenv( (string) @file_get_contents( $file ) ) );
+			}
+		}
+		foreach ( array( $_SERVER, $_ENV, (array) getenv() ) as $source ) {
+			foreach ( $source as $key => $value ) {
+				if ( is_string( $key ) && is_scalar( $value ) && '' !== (string) $value ) {
+					$env[ $key ] = (string) $value;
+				}
+			}
+		}
+		return $env;
 	}
 
 	/**
@@ -682,11 +740,7 @@ class Installer {
 	 * @return string|null
 	 */
 	private static function read_define( $text, $constant ) {
-		$re = '/define\s*\(\s*([\'"])' . preg_quote( $constant, '/' ) . '\1\s*,\s*([\'"])((?:(?!\2)[^\\\\]|\\\\.)*)\2\s*\)/';
-		if ( preg_match( $re, $text, $m ) ) {
-			return "'" === $m[2] ? str_replace( array( "\\'", '\\\\' ), array( "'", '\\' ), $m[3] ) : stripcslashes( $m[3] );
-		}
-		return null;
+		return Host_Compat::read_define( $text, $constant );
 	}
 
 	/**
@@ -779,7 +833,20 @@ class Installer {
 		if ( is_file( $this->root . '/wp-settings.php' ) && 'setup' === $this->phase() ) {
 			$add( 'WordPress existant', 'détecté', 'warn', 'Les fichiers et les tables portant le même nom seront remplacés.' );
 		}
-		$add( 'Connexion', $this->is_https() ? 'HTTPS' : 'HTTP (non chiffrée)', $this->is_https() ? 'ok' : 'warn', 'Le site fonctionnera en HTTP. Activez un certificat SSL dès que possible.' );
+		$proxy = Host_Compat::https_via_proxy( $_SERVER );
+		$add( 'Connexion', $this->is_https() ? ( $proxy ? 'HTTPS (via un proxy)' : 'HTTPS' ) : 'HTTP (non chiffrée)', $this->is_https() ? 'ok' : 'warn', 'Le site fonctionnera en HTTP. Activez un certificat SSL dès que possible.' );
+		if ( Host_Compat::is_iis( $_SERVER ) ) {
+			$add( 'Serveur web', 'IIS', 'ok', '' );
+		}
+		$basedir = (string) ini_get( 'open_basedir' );
+		if ( '' !== trim( $basedir ) ) {
+			$inside = Host_Compat::path_allowed( $this->root ) && Host_Compat::path_allowed( $this->data_dir );
+			$add( 'Restriction open_basedir', $inside ? 'active, dossier du site autorisé' : 'dossier du site hors des chemins autorisés', $inside ? 'ok' : 'error', 'Ajoutez ' . $this->root . ' aux chemins autorisés (open_basedir) dans le panneau de votre hébergeur.' );
+		}
+		$config = $this->destination_config_text();
+		if ( '' !== $config && Host_Compat::config_uses_env( $config ) ) {
+			$add( 'Configuration existante', 'accès à la base lus dans l’environnement', 'ok', '' );
+		}
 		return $c;
 	}
 
@@ -803,6 +870,9 @@ class Installer {
 			'home_url' => ! empty( $this->config['target']['home_url'] ) ? $this->config['target']['home_url'] : $this->derive_home( $url ),
 			'path'     => $this->root,
 		);
+		// wp-config.php alimenté par l'environnement (Bedrock, Pantheon, Docker…) : conservé par défaut.
+		$defaults['keep_config'] = ! empty( $existing['env'] ) && 'direct' !== $this->config['mode'];
+		$defaults['innodb']      = true;
 		if ( ! empty( $this->state['form'] ) ) {
 			$defaults = array_merge( $defaults, $this->state['form'] );
 		}
@@ -814,6 +884,7 @@ class Installer {
 			'defaults'       => $defaults,
 			'password_saved' => '' !== $this->saved_db_password(),
 			'existing'       => ! empty( $existing ),
+			'config_exists'  => '' !== $this->destination_config_text(),
 			'progress'       => $this->progress_payload(),
 		);
 	}
@@ -838,8 +909,10 @@ class Installer {
 			// Champ laissé vide : mot de passe connu côté serveur (migration directe, wp-config existant).
 			$f['password'] = $this->saved_db_password();
 		}
-		$f['create']     = ! empty( $_POST['create'] );
-		$f['quarantine'] = ! empty( $_POST['quarantine'] );
+		$f['create']      = ! empty( $_POST['create'] );
+		$f['quarantine']  = ! empty( $_POST['quarantine'] );
+		$f['innodb']      = ! empty( $_POST['innodb'] );
+		$f['keep_config'] = ! empty( $_POST['keep_config'] );
 		if ( '' === $f['host'] ) {
 			$f['host'] = 'localhost';
 		}
@@ -888,7 +961,8 @@ class Installer {
 			$notes[] = 'Version ancienne : MySQL 5.6+ ou MariaDB 10.1+ recommandé.';
 		}
 		$test = $f['prefix'] . 'lwb_privilege_test';
-		if ( ! $db->query( 'CREATE TABLE IF NOT EXISTS ' . Db::ident( $test ) . ' (id INT)' ) || ! $db->query( 'DROP TABLE ' . Db::ident( $test ) ) ) {
+		// Clé primaire : exigée par certains serveurs (sql_require_primary_key, innodb_force_primary_key).
+		if ( ! $db->query( 'CREATE TABLE IF NOT EXISTS ' . Db::ident( $test ) . ' (id INT NOT NULL PRIMARY KEY)' ) || ! $db->query( 'DROP TABLE ' . Db::ident( $test ) ) ) {
 			throw new Migration_Exception( 'L’utilisateur MySQL ne peut pas créer de tables : ' . $db->last_error(), 'Attribuez tous les privilèges à cet utilisateur sur la base (panneau de l’hébergeur).' );
 		}
 		$existing = count( $db->list_tables( $f['prefix'] ) );
@@ -897,7 +971,10 @@ class Installer {
 		}
 		$packet = (int) $db->get_var( 'SELECT @@max_allowed_packet' );
 		if ( $packet > 0 && $packet < 1048576 * 2 ) {
-			$notes[] = 'max_allowed_packet est faible (' . Runtime::format_bytes( $packet ) . ').';
+			$notes[] = 'max_allowed_packet est faible (' . Runtime::format_bytes( $packet ) . ') : les insertions seront découpées.';
+		}
+		if ( '1' === (string) $db->get_var( 'SELECT @@sql_require_primary_key' ) || '1' === (string) $db->get_var( 'SELECT @@innodb_force_primary_key' ) ) {
+			$notes[] = 'Le serveur exige une clé primaire sur chaque table : elle sera ajoutée aux tables qui n’en ont pas.';
 		}
 		$db->close();
 		return array(
@@ -927,10 +1004,15 @@ class Installer {
 			setcookie( self::COOKIE, '', time() - 3600, $this->script_dir() . '/' );
 			throw new Migration_Exception( 'Session à renouveler pour déchiffrer l’archive.', 'Rechargez la page et saisissez à nouveau le mot de passe de l’installeur.' );
 		}
-		$f  = $this->read_form();
+		$f      = $this->read_form();
+		$config = $this->destination_config_text();
+		if ( $f['keep_config'] && '' === $config ) {
+			throw new Migration_Exception( 'Aucun wp-config.php à conserver sur la destination.', 'Décochez « Conserver le wp-config.php de la destination » : il sera créé à partir de celui du site source.' );
+		}
 		$db = $this->connect( $f );
 		$db->close();
 		$src         = $this->config['source'];
+		$modes       = Host_Compat::fs_modes( $f['keep_config'] ? $config : '' );
 		$this->state = array(
 			'phase'       => $this->is_encrypted() ? 'decrypt' : 'extract',
 			'archive_key' => $key,
@@ -961,6 +1043,9 @@ class Installer {
 			'errors'      => 0,
 			'started'     => time(),
 			'notes'       => array(),
+			// Permissions appliquées aux fichiers extraits (FS_CHMOD_FILE / FS_CHMOD_DIR).
+			'modes'       => $modes,
+			'config_file' => $f['keep_config'] ? $this->destination_config_file() : '',
 			'backup'      => array(
 				'config' => array(),
 				'files'  => 0,
@@ -974,6 +1059,9 @@ class Installer {
 		$log->info( sprintf( 'Installation démarrée – Lwb Migration %s, PHP %s.', $this->config['version'], PHP_VERSION ) );
 		$log->info( sprintf( 'Source : %s (%s). Destination : %s (%s).', $src['site_url'], $src['abspath'], $f['site_url'], $this->root ) );
 		$log->info( sprintf( 'Base : %s@%s/%s, préfixe %s (source : %s).', $f['user'], $f['host'], $f['name'], $f['prefix'], $src['table_prefix'] ) );
+		if ( $f['keep_config'] ) {
+			$log->info( 'wp-config.php de la destination conservé (seul le préfixe de tables sera ajusté si besoin).' );
+		}
 		return array_merge( array( 'ok' => true ), $this->progress_payload() );
 	}
 
@@ -1045,6 +1133,7 @@ class Installer {
 			'database.sql'        => $this->data_dir . '/database.sql',
 			'files/wp-config.php' => $this->data_dir . '/wp-config-source.php',
 			'files/.htaccess'     => $this->data_dir . '/htaccess-source.txt',
+			'files/web.config'    => $this->data_dir . '/web-config-source.txt',
 			'files/.user.ini'     => $this->data_dir . '/user-ini-source.txt',
 			'files/php.ini'       => $this->data_dir . '/php-ini-source.txt',
 		);
@@ -1109,6 +1198,9 @@ class Installer {
 				$entry  = $reader->next_entry( $cursor );
 				if ( null === $entry ) {
 					$this->log()->info( sprintf( 'Extraction terminée : %d éléments, %d ignorés.', $st['done'], $st['skipped'] ) );
+					if ( ! empty( $st['host'] ) ) {
+						$this->log()->info( 'Fichiers propres à l’hébergeur laissés tels quels (ni copiés, ni écrasés) : ' . implode( ', ', array_keys( $st['host'] ) ) . '.' );
+					}
 					$this->state['phase'] = 'import';
 					return;
 				}
@@ -1119,6 +1211,12 @@ class Installer {
 			$entry = $st['entry'];
 			$name  = Archive_Reader::safe_name( $entry['name'] );
 			$dest  = null === $name ? null : $this->target_for( $name );
+			if ( null !== $dest && 0 === strpos( $name, 'files/' ) && Host_Compat::is_protected_destination( substr( $name, 6 ), $this->root ) ) {
+				// Extension « must-use » ou drop-in d'un hébergeur : jamais copié ni écrasé.
+				$top                = preg_match( '#^files/(wp-content/(?:mu-plugins/)?[^/]+)#', $name, $h ) ? $h[1] : $name;
+				$st['host'][ $top ] = 1;
+				$dest               = null;
+			}
 			if ( null !== $name && preg_match( '#^files/wp-content/(plugins|themes)/([^/]+)#', $name, $m ) ) {
 				// Extensions et thèmes du site source (voir quarantine_leftovers()).
 				$st['keep'][ $m[1] ][ $m[2] ] = 1;
@@ -1146,11 +1244,32 @@ class Installer {
 				$this->log()->warning( 'Somme de contrôle incorrecte (fichier modifié pendant l’export ?) : ' . $entry['name'] );
 				++$this->state['warnings'];
 			}
+			$this->apply_mode( $dest, ! empty( $entry['dir'] ) );
+			if ( $this->data_dir . '/wp-config-source.php' === $dest && empty( $this->state['form']['keep_config'] ) ) {
+				// Le wp-config.php du site source sera celui du site : ses FS_CHMOD_* s'appliquent.
+				$this->state['modes'] = Host_Compat::fs_modes( (string) @file_get_contents( $dest ) );
+			}
 			++$st['done'];
 			$st['entry']  = null;
 			$st['prog']   = array();
 			$st['cursor'] = $st['next'];
 		} while ( ! $rt->should_stop() );
+	}
+
+	/**
+	 * Permissions d'un fichier ou dossier extrait (0644 / 0755 sauf FS_CHMOD_* contraires) :
+	 * indépendantes du umask du serveur et des droits d'origine.
+	 *
+	 * @param string $path   Chemin.
+	 * @param bool   $is_dir Dossier.
+	 * @return void
+	 */
+	private function apply_mode( $path, $is_dir ) {
+		if ( 0 === strpos( $path, $this->data_dir . '/' ) || ! file_exists( $path ) || is_link( $path ) ) {
+			return;
+		}
+		$modes = isset( $this->state['modes'] ) && is_array( $this->state['modes'] ) ? $this->state['modes'] : Host_Compat::fs_modes( '' );
+		@chmod( $path, $is_dir ? (int) $modes[1] : (int) $modes[0] );
 	}
 
 	/**
@@ -1181,6 +1300,7 @@ class Installer {
 			$state = array(
 				'old_prefix' => $this->config['source']['table_prefix'],
 				'new_prefix' => $this->state['db']['prefix'],
+				'innodb'     => ! empty( $this->state['form']['innodb'] ),
 			);
 			if ( $state['old_prefix'] !== $state['new_prefix'] ) {
 				$this->log()->info( sprintf( 'Changement de préfixe : %s → %s.', $state['old_prefix'], $state['new_prefix'] ) );
@@ -1203,6 +1323,15 @@ class Installer {
 		if ( $done ) {
 			$s = $this->state['import'];
 			$this->log()->info( sprintf( 'Import SQL terminé : %d requêtes, %d tables, %d erreur(s).', $s['queries'], count( $s['tables'] ), $s['errors'] ) );
+			if ( ! empty( $s['converted'] ) ) {
+				$this->log()->info( sprintf( '%d table(s) MyISAM/Aria convertie(s) en InnoDB.', count( $s['converted'] ) ) );
+			}
+			if ( ! empty( $s['split'] ) ) {
+				$this->log()->info( sprintf( '%d insertion(s) découpée(s) pour respecter max_allowed_packet.', $s['split'] ) );
+			}
+			if ( ! empty( $s['fixes'] ) ) {
+				$this->state['notes'][] = 'Base de données adaptée au serveur : ' . implode( ' ', array_slice( $s['fixes'], 0, 8 ) ) . ( count( $s['fixes'] ) > 8 ? ' (voir le journal)' : '' );
+			}
 			$this->state['errors'] += (int) $s['errors'];
 			$this->fix_prefix( $db );
 			$this->state['phase'] = 'replace';
@@ -1359,7 +1488,7 @@ class Installer {
 			@unlink( $this->reader_path() ); // Copie déchiffrée.
 			unset( $this->state['archive_key'] );
 		}
-		foreach ( array( 'database.sql', 'wp-config-source.php', 'htaccess-source.txt', 'user-ini-source.txt', 'php-ini-source.txt', 'package.json' ) as $tmp ) {
+		foreach ( array( 'database.sql', 'wp-config-source.php', 'htaccess-source.txt', 'web-config-source.txt', 'user-ini-source.txt', 'php-ini-source.txt', 'package.json' ) as $tmp ) {
 			@unlink( $this->data_dir . '/' . $tmp );
 		}
 		@file_put_contents( $this->root . '/' . self::DONE_MARKER, json_encode( array( $this->self, basename( $this->data_dir ), basename( $this->archive_path() ) ) ) );
@@ -1632,13 +1761,7 @@ class Installer {
 	 * @return string
 	 */
 	private static function insert_before_end( $text, $line ) {
-		foreach ( array( "/* That's all", '/** Absolute path', "if ( ! defined( 'ABSPATH' ) )", "if ( !defined('ABSPATH') )", 'require_once ABSPATH', 'require_once(ABSPATH' ) as $marker ) {
-			$pos = strpos( $text, $marker );
-			if ( false !== $pos ) {
-				return substr( $text, 0, $pos ) . $line . "\n\n" . substr( $text, $pos );
-			}
-		}
-		return rtrim( $text ) . "\n" . $line . "\n";
+		return Host_Compat::insert_before_end( $text, $line );
 	}
 
 	/**
@@ -1663,6 +1786,10 @@ class Installer {
 	 * @throws Migration_Exception Écriture impossible.
 	 */
 	private function write_wp_config() {
+		if ( ! empty( $this->state['form']['keep_config'] ) ) {
+			$this->keep_wp_config();
+			return;
+		}
 		$src_file = $this->data_dir . '/wp-config-source.php';
 		$text     = is_file( $src_file ) ? (string) file_get_contents( $src_file ) : '';
 		if ( '' === trim( $text ) ) {
@@ -1717,6 +1844,14 @@ class Installer {
 			$text = self::set_define( $text, 'DOMAIN_CURRENT_SITE', $host, false );
 			$text = self::set_define( $text, 'PATH_CURRENT_SITE', $path, false );
 		}
+		if ( 0 === strpos( $tgt['site_url'], 'https://' ) && Host_Compat::https_via_proxy( $_SERVER ) ) {
+			// Cloudflare en SSL flexible, répartiteur de charge : sans cela, boucle de redirection.
+			$before = $text;
+			$text   = Host_Compat::add_proxy_https( $text );
+			if ( $before !== $text ) {
+				$this->log()->info( 'HTTPS fourni par un proxy : reconnaissance ajoutée à wp-config.php (évite les boucles de redirection).' );
+			}
+		}
 		$file = $this->root . '/wp-config.php';
 		if ( false === @file_put_contents( $file, $text ) ) {
 			throw new Migration_Exception( 'Impossible d’écrire wp-config.php.', 'Rendez le dossier du site accessible en écriture (755) puis relancez.', true );
@@ -1724,18 +1859,55 @@ class Installer {
 		@chmod( $file, 0640 );
 		// Un ancien wp-config.php au-dessus de la racine serait chargé en priorité par WordPress.
 		$parent = dirname( $this->root ) . '/wp-config.php';
-		if ( is_file( $parent ) && ! is_file( dirname( $this->root ) . '/wp-settings.php' ) ) {
+		if ( Host_Compat::path_allowed( $parent ) && is_file( $parent ) && ! is_file( dirname( $this->root ) . '/wp-settings.php' ) ) {
 			$this->state['notes'][] = 'Un fichier wp-config.php existe dans le dossier parent : il est ignoré, car celui de la racine est prioritaire.';
 		}
 		$this->log()->info( 'wp-config.php mis à jour (base de données, préfixe, nouvelles clés SALT).' );
 	}
 
 	/**
-	 * Réinitialise .htaccess (règles WordPress standard).
+	 * Mode « conserver la configuration de la destination » : le wp-config.php existant
+	 * (variables d'environnement, réglages de l'hébergeur) reste tel quel, seul le préfixe
+	 * de tables est ajusté s'il diffère.
+	 *
+	 * @return void
+	 * @throws Migration_Exception Écriture impossible.
+	 */
+	private function keep_wp_config() {
+		$file = ! empty( $this->state['config_file'] ) ? (string) $this->state['config_file'] : $this->destination_config_file();
+		$text = '' !== $file ? (string) @file_get_contents( $file ) : '';
+		if ( '' === $text ) {
+			throw new Migration_Exception( 'Le wp-config.php de la destination est introuvable.', 'Rétablissez-le, ou relancez l’installation sans conserver la configuration de la destination.', true );
+		}
+		$prefix  = $this->state['db']['prefix'];
+		$current = Host_Compat::table_prefix( $text, $this->environment() );
+		if ( $current !== $prefix ) {
+			if ( false === @file_put_contents( $file, Host_Compat::set_table_prefix( $text, $prefix ) ) ) {
+				throw new Migration_Exception( 'Impossible d’écrire wp-config.php.', 'Rendez le fichier accessible en écriture puis relancez.', true );
+			}
+			$this->log()->info( sprintf( 'wp-config.php de la destination conservé, préfixe de tables fixé à %s.', $prefix ) );
+		} else {
+			$this->log()->info( 'wp-config.php de la destination conservé tel quel.' );
+		}
+		$this->state['notes'][] = 'Le wp-config.php de la destination a été conservé (accès à la base, clés et réglages de l’hébergeur). Les réglages propres au site source (constantes personnalisées) n’ont pas été repris.';
+		if ( ! empty( $this->config['source']['multisite'] ) && null === self::read_define( $text, 'MULTISITE' ) && false === strpos( $text, 'MULTISITE' ) ) {
+			$this->state['notes'][] = 'Le site source est un multisite : ajoutez les constantes MULTISITE, DOMAIN_CURRENT_SITE et PATH_CURRENT_SITE au wp-config.php de la destination.';
+		}
+		if ( 0 === strpos( $this->state['target']['site_url'], 'https://' ) && Host_Compat::https_via_proxy( $_SERVER ) && ! preg_match( '/HTTP_X_FORWARDED_PROTO|HTTP_CF_VISITOR|HTTP_X_FORWARDED_SSL/', $text ) ) {
+			$this->state['notes'][] = 'HTTPS est assuré par un proxy : si le site redirige en boucle, ajoutez à wp-config.php la reconnaissance de l’en-tête X-Forwarded-Proto (ou réglez Cloudflare en SSL « Complet »).';
+		}
+	}
+
+	/**
+	 * Réinitialise les règles de réécriture : .htaccess (Apache, LiteSpeed) ou web.config (IIS).
 	 *
 	 * @return void
 	 */
 	private function write_htaccess() {
+		if ( Host_Compat::is_iis( $_SERVER ) ) {
+			$this->write_web_config();
+			return;
+		}
 		$path = (string) parse_url( $this->state['target']['home_url'], PHP_URL_PATH );
 		$base = rtrim( $path, '/' ) . '/';
 		$htac = "# BEGIN WordPress\n<IfModule mod_rewrite.c>\nRewriteEngine On\nRewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\nRewriteBase {$base}\nRewriteRule ^index\\.php$ - [L]\nRewriteCond %{REQUEST_FILENAME} !-f\nRewriteCond %{REQUEST_FILENAME} !-d\nRewriteRule . {$base}index.php [L]\n</IfModule>\n# END WordPress\n";
@@ -1750,6 +1922,33 @@ class Installer {
 			return;
 		}
 		$this->log()->info( '.htaccess réinitialisé (RewriteBase ' . $base . ').' );
+	}
+
+	/**
+	 * IIS : web.config avec la règle de réécriture de WordPress (le .htaccess y est ignoré).
+	 *
+	 * @return void
+	 */
+	private function write_web_config() {
+		$file = $this->root . '/web.config';
+		$orig = $this->data_dir . '/web-config-source.txt';
+		if ( is_file( $orig ) ) {
+			@copy( $orig, $this->root . '/web.config.lwb-original' );
+			$this->state['notes'][] = 'Le web.config d’origine a été remplacé par la version WordPress standard (IIS). L’original est conservé dans web.config.lwb-original.';
+		} elseif ( is_file( $file ) ) {
+			$current = (string) @file_get_contents( $file );
+			if ( false !== stripos( $current, 'index.php' ) ) {
+				$this->log()->info( 'web.config existant conservé (règle de réécriture déjà présente).' );
+				return;
+			}
+			@copy( $file, $this->root . '/web.config.lwb-original' );
+		}
+		if ( false === @file_put_contents( $file, Host_Compat::web_config() ) ) {
+			$this->log()->warning( 'Impossible d’écrire web.config.' );
+			++$this->state['warnings'];
+			return;
+		}
+		$this->log()->info( 'Serveur IIS : web.config écrit (réécriture des adresses de WordPress).' );
 	}
 
 	/**
@@ -1786,6 +1985,9 @@ class Installer {
 	private function disable_dropins() {
 		foreach ( self::DROPINS as $dropin ) {
 			$file = $this->root . '/wp-content/' . $dropin;
+			if ( Host_Compat::is_protected_destination( 'wp-content/' . $dropin, $this->root ) ) {
+				continue; // Drop-in de l'hébergeur de destination : indispensable à sa plateforme.
+			}
 			if ( is_file( $file ) && @rename( $file, $file . '.lwb-disabled' ) ) {
 				$this->state['notes'][] = 'wp-content/' . $dropin . ' a été désactivé (renommé en .lwb-disabled) : réactivez votre extension de cache après vérification du site.';
 				$this->log()->info( 'Drop-in désactivé : ' . $dropin );
@@ -2171,6 +2373,7 @@ class Installer {
 			@file_put_contents( $this->root . '/' . $name, $raw );
 		}
 		@unlink( $this->root . '/.htaccess.lwb-original' );
+		@unlink( $this->root . '/web.config.lwb-original' );
 	}
 
 	/**
@@ -2496,6 +2699,7 @@ class Installer {
 							<div><label for="password">Mot de passe</label><input id="password" name="password" type="password" autocomplete="new-password"></div>
 							<div><label for="prefix">Préfixe des tables</label><input id="prefix" name="prefix" required pattern="[A-Za-z0-9_]+"></div>
 							<div class="check"><label class="toggle"><input type="checkbox" name="create" value="1"><span class="toggle-ui" aria-hidden="true"></span> Créer la base si elle n’existe pas</label></div>
+							<div class="full check" id="keep-config-row" hidden><label class="toggle"><input type="checkbox" name="keep_config" value="1"><span class="toggle-ui" aria-hidden="true"></span> Conserver le wp-config.php de la destination (variables d’environnement, réglages de l’hébergeur) : seul le préfixe des tables est ajusté</label></div>
 						</div>
 						<details class="advanced">
 							<summary>Adresse et dossier du nouveau site <span class="muted">— détectés automatiquement</span></summary>
@@ -2504,6 +2708,7 @@ class Installer {
 								<div class="full"><label for="home_url">Adresse de la page d’accueil</label><input id="home_url" name="home_url" required></div>
 								<div class="full"><label for="path">Dossier sur le serveur</label><input id="path" readonly></div>
 								<div class="full check"><label class="toggle"><input type="checkbox" name="quarantine" value="1" checked><span class="toggle-ui" aria-hidden="true"></span> Mettre de côté les extensions et thèmes du serveur absents du site source</label></div>
+								<div class="full check"><label class="toggle"><input type="checkbox" name="innodb" value="1" checked><span class="toggle-ui" aria-hidden="true"></span> Convertir les tables MyISAM et Aria en InnoDB (recommandé, exigé par les bases en cluster)</label></div>
 							</div>
 						</details>
 						<div class="msg" id="db-result" hidden></div>
@@ -2608,6 +2813,8 @@ class Installer {
 		['host', 'name', 'user', 'password', 'prefix', 'site_url', 'home_url'].forEach(function (k) { out[k] = f.elements[k].value; });
 		out.create = f.elements.create.checked ? '1' : '';
 		out.quarantine = f.elements.quarantine.checked ? '1' : '';
+		out.innodb = f.elements.innodb.checked ? '1' : '';
+		out.keep_config = f.elements.keep_config.checked && !$('keep-config-row').hidden ? '1' : '';
 		return out;
 	}
 	function renderChecks(checks) {
@@ -2628,6 +2835,7 @@ class Installer {
 	function fillForm(d) {
 		var f = $('db-form');
 		['host', 'name', 'user', 'password', 'prefix', 'site_url', 'home_url'].forEach(function (k) { if (d[k] !== undefined) { f.elements[k].value = d[k]; } });
+		['innodb', 'keep_config'].forEach(function (k) { if (d[k] !== undefined) { f.elements[k].checked = !!d[k] && d[k] !== '0'; } });
 		$('path').value = d.path || '';
 	}
 	var hasBackup = false;
@@ -2847,6 +3055,7 @@ class Installer {
 		fillForm(d.defaults);
 		if (d.password_saved) { $('password').placeholder = 'Mot de passe enregistré : laissez vide pour le conserver'; }
 		if (d.existing && B.mode !== 'direct') { $('db-hint').textContent = 'Identifiants pré-remplis depuis le wp-config.php existant : vérifiez-les.'; }
+		$('keep-config-row').hidden = !d.config_exists || B.mode === 'direct';
 		if (d.phase === 'done') { done(d.progress); return; }
 		if (d.phase === 'restored') { setStep('done'); show('restored'); return; }
 		if (d.phase === 'restoring') { hasBackup = true; show('run'); $('run-title').textContent = 'Restauration de l’ancien site…'; (function resume() { api('restore').then(function (x) { if (!x.ok) { error(x.message, x.solution); return; } $('detail').textContent = x.detail || ''; if (x.phase === 'restored') { show('restored'); return; } setTimeout(resume, 300); }).catch(function (e) { error(e.message, 'Rechargez la page.'); }); })(); return; }
