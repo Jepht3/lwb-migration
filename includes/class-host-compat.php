@@ -455,7 +455,7 @@ class Host_Compat {
 	}
 
 	/**
-	 * web.config de WordPress pour IIS (module URL Rewrite).
+	 * Fichier web.config de WordPress pour IIS (module URL Rewrite).
 	 *
 	 * @return string
 	 */

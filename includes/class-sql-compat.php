@@ -327,20 +327,20 @@ class Sql_Compat {
 	/**
 	 * Découpe une liste sur les virgules de premier niveau.
 	 *
-	 * @param string $list Liste.
+	 * @param string $items Liste.
 	 * @return string[]
 	 */
-	private static function split_top_level( $list ) {
+	private static function split_top_level( $items ) {
 		$out   = array();
 		$depth = 0;
 		$cur   = '';
-		$len   = strlen( $list );
+		$len   = strlen( $items );
 		for ( $i = 0; $i < $len; $i++ ) {
-			$c = $list[ $i ];
+			$c = $items[ $i ];
 			if ( '`' === $c ) {
-				$next = strpos( $list, '`', $i + 1 );
+				$next = strpos( $items, '`', $i + 1 );
 				$next = false === $next ? $len - 1 : $next;
-				$cur .= substr( $list, $i, $next - $i + 1 );
+				$cur .= substr( $items, $i, $next - $i + 1 );
 				$i    = $next;
 				continue;
 			}

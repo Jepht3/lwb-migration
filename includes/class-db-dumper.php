@@ -114,7 +114,7 @@ class Db_Dumper {
 		$this->state['rows_total'] = max( 1, $total );
 		// Vues : non exportées (leur DEFINER et leurs requêtes dépendent du serveur source),
 		// mais signalées pour être recréées à la main sur la destination.
-		$this->state['views'] = array_values( array_diff( $this->db->list_views( $prefix ), $exclude ) );
+		$this->state['views']      = array_values( array_diff( $this->db->list_views( $prefix ), $exclude ) );
 	}
 
 	/**
