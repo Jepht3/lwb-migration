@@ -14,6 +14,7 @@ namespace LwbMigration\Installer;
 use LwbMigration\Archive_Crypto;
 use LwbMigration\Archive_Reader;
 use LwbMigration\Db;
+use LwbMigration\Host_Compat;
 use LwbMigration\Json_Store;
 use LwbMigration\Logger;
 use LwbMigration\Migration_Exception;

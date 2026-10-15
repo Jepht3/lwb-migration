@@ -51,9 +51,10 @@ class ServerCompatTest extends TestCase {
 	public function test_too_long_indexes_are_shortened() {
 		$db = $this->create_db();
 		// MyISAM : 1 000 octets par index (2 000 sur MariaDB 10.5+), sur tous les serveurs. InnoDB
-		// limité à 767 octets : voir la CI MySQL 5.7 (format COMPACT). Index UNIQUE : un index
-		// ordinaire trop long est tronqué par le serveur lui-même (avertissement 1071).
-		$sql = "CREATE TABLE `wp_long` (\n  `id` int(11) NOT NULL,\n  `a` varchar(255) NOT NULL,\n  `b` varchar(255) NOT NULL,\n  `c` varchar(255) NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `abc` (`a`,`b`,`c`)\n) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4;\nINSERT INTO `wp_long` (`id`,`a`,`b`,`c`) VALUES (1,'" . str_repeat( 'é', 255 ) . "','b','c');\n";
+		// limité à 767 octets : voir la CI MySQL 5.7 (format COMPACT). Clé primaire : un index
+		// ordinaire trop long est tronqué par le serveur lui-même (avertissement 1071) et MariaDB
+		// 10.4+ accepte les index UNIQUE longs (empreinte cachée).
+		$sql = "CREATE TABLE `wp_long` (\n  `id` int(11) NOT NULL,\n  `a` varchar(255) NOT NULL,\n  `b` varchar(255) NOT NULL,\n  `c` varchar(255) NOT NULL,\n  PRIMARY KEY (`a`,`b`,`c`),\n  KEY `id` (`id`)\n) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4;\nINSERT INTO `wp_long` (`id`,`a`,`b`,`c`) VALUES (1,'" . str_repeat( 'é', 255 ) . "','b','c');\n";
 
 		$state = $this->import( $db, $sql );
 		$this->assertSame( 0, $state['errors'], 'Index raccourci au lieu d’une table manquante.' );

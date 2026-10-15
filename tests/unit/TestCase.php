@@ -57,6 +57,8 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase {
 		// Serveur de CI avec sql_require_primary_key=ON : les jeux d'essai créent aussi des tables
 		// sans clé primaire (l'importeur, lui, doit s'en sortir sans ce privilège).
 		$db->query( 'SET SESSION sql_require_primary_key = 0' );
+		// Modes SQL de WordPress (sans STRICT ni NO_ZERO_DATE, actifs par défaut sur MySQL 5.7+).
+		$db->query( "SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'" );
 		return $db;
 	}
 
