@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,17 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.6.0 =
+* Hébergeurs gérés : les extensions « must-use » et drop-ins propres à la plateforme (WP Engine, Kinsta, GoDaddy, Pantheon, Bluehost, Hostinger, Flywheel, WordPress.com, Nexcess…) ne sont plus exportés, et ceux du serveur de destination ne sont jamais écrasés ni désactivés
+* wp-config.php alimenté par des variables d’environnement ou un fichier .env (Bedrock, Pantheon, Platform.sh, Docker) : les accès à la base sont lus et pré-remplis, et le nouveau mode « Conserver le wp-config.php de la destination » (coché d’office dans ce cas) ne change que le préfixe des tables si besoin
+* Bases de données strictes : conversion facultative MyISAM/Aria → InnoDB (cochée par défaut) ; clé primaire ajoutée automatiquement quand le serveur l’exige (sql_require_primary_key de DigitalOcean, Azure, PlanetScale, innodb_force_primary_key de MariaDB) ; index trop longs raccourcis sur MySQL 5.6 ou MariaDB 10.1 (767 octets) ; insertions découpées selon le max_allowed_packet réel du serveur de destination
+* Les vues SQL, non exportées, sont désormais signalées dans le journal d’export
+* Permissions des fichiers extraits fixées à 0644 / 0755 (ou FS_CHMOD_FILE / FS_CHMOD_DIR du wp-config.php), quel que soit le umask du serveur
+* open_basedir : aucun fichier lu ni créé hors des dossiers autorisés (wp-config.php du dossier parent, dossier temporaire système des mises à jour), restriction affichée dans les vérifications de l’installeur
+* Derrière un proxy (Cloudflare en SSL flexible, répartiteur de charge) : la reconnaissance du HTTPS est ajoutée à wp-config.php pour éviter les boucles de redirection
+* Serveurs IIS : un web.config avec les règles de réécriture de WordPress remplace le .htaccess
+* Tests automatiques sur MySQL 5.7 (index limités à 767 octets), MySQL 8.0 (clé primaire obligatoire), MariaDB 10.4, 10.11 et 11.4, ainsi que sous nginx + php-fpm et avec open_basedir
 
 = 1.5.0 =
 * Migration avant le changement de DNS : dans les options avancées de la migration directe, indiquez l’adresse IP du nouveau serveur (le nom de domaine, l’en-tête Host et la vérification du certificat SSL sont conservés, comme curl --resolve) ou son URL temporaire. Le site source pilote lui-même l’installeur du nouveau serveur, que le navigateur ne peut pas encore atteindre ; le site est installé avec son adresse définitive et la ligne du fichier hosts est proposée pour le vérifier avant la bascule
