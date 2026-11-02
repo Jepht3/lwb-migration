@@ -3,12 +3,12 @@
 # Langue source : français.
 msgid ""
 msgstr ""
-"Project-Id-Version: Lwb Migration 1.7.0\n"
+"Project-Id-Version: Lwb Migration 1.7.1\n"
 "Report-Msgid-Bugs-To: https://github.com/Jepht3/lwb-migration/issues\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-02 10:36+0000\n"
+"POT-Creation-Date: 2026-11-02 11:28+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1266,7 +1266,7 @@ msgstr ""
 msgid "Vérifiez les permissions du dossier de stockage."
 msgstr ""
 
-#: includes/class-ajax.php:224 includes/class-updater.php:465 includes/class-admin.php:118
+#: includes/class-ajax.php:224 includes/class-updater.php:467 includes/class-admin.php:118
 msgid "Accès refusé."
 msgstr ""
 
@@ -1286,19 +1286,19 @@ msgstr ""
 msgid "Réglages des sauvegardes enregistrés."
 msgstr ""
 
-#: includes/class-updater.php:290
+#: includes/class-updater.php:292
 msgid "Migrez un site WordPress complet (fichiers + base de données) vers n’importe quel serveur, sans configuration : export en un clic, installer.php autonome ou migration directe de serveur à serveur."
 msgstr ""
 
-#: includes/class-updater.php:352
+#: includes/class-updater.php:354
 msgid "Lwb Migration : cette mise à jour n’est pas signée par LEWEBMAX (signature absente ou invalide). Elle a été refusée par sécurité."
 msgstr ""
 
-#: includes/class-updater.php:367
+#: includes/class-updater.php:369
 msgid "Lwb Migration : le fichier de mise à jour téléchargé est corrompu (empreinte SHA-256 invalide). Réessayez plus tard."
 msgstr ""
 
-#: includes/class-updater.php:454
+#: includes/class-updater.php:456
 msgid "Vérifier les mises à jour"
 msgstr ""
 

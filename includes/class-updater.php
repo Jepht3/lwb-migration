@@ -149,7 +149,7 @@ class Updater {
 	}
 
 	/**
-	 * Dernière version publiée (mise en cache 6 h, 30 min en cas d'échec).
+	 * Dernière version publiée (mise en cache 1 h, 30 min en cas d'échec).
 	 *
 	 * @param bool $force Ignorer le cache.
 	 * @return array|null
@@ -175,7 +175,9 @@ class Updater {
 				$data = null; // Publication non signée par LEWEBMAX : jamais proposée.
 			}
 		}
-		set_site_transient( self::CACHE, $data ? $data : array(), $data ? 6 * HOUR_IN_SECONDS : 30 * MINUTE_IN_SECONDS );
+		// 1 h : une nouvelle version apparaît dans Extensions › Mises à jour au plus tard une
+		// heure après sa publication (dès que WordPress vérifie, ou à la visite de cette page).
+		set_site_transient( self::CACHE, $data ? $data : array(), $data ? HOUR_IN_SECONDS : 30 * MINUTE_IN_SECONDS );
 		update_site_option( self::CHECKED, time() );
 		return $data;
 	}

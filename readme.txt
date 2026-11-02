@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -108,6 +108,9 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.7.1 =
+* Les nouvelles versions sont détectées plus vite : au plus tard une heure après leur publication, dès qu'un administrateur ouvre l'administration (au lieu de six heures auparavant)
 
 = 1.7.0 =
 * Nouveau tableau de bord : un accueil « Que voulez-vous faire ? » avec de grandes tuiles (Exporter, Migration directe, Importer, Sauvegardes, Paramètres) qui affichent leur état, la configuration du serveur et l'activité récente. Plus de barre d'onglets : chaque action s'ouvre sur son écran, avec un retour à l'accueil
