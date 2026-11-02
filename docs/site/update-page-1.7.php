@@ -51,12 +51,22 @@ $edits = array(
 			"<details open><summary>Version 1.7.0</summary><div class='a'><ul><li>Nouveau tableau de bord : grandes tuiles, choix par cartes, gros boutons</li><li>Un seul fichier à exporter puis importer et restaurer, comme All-in-One WP Migration</li><li>Import par glisser-déposer</li></ul></div></details><details><summary>Version 1.6.0</summary><div class='a'><ul><li>Sauvegardes automatiques configurables et restauration en un clic</li></ul></div></details><details><summary>Version 1.4.0</summary>"),
 	),
 );
-$errors = array();
+// Typographie française du contenu en ligne : espaces insécables avant « : ? ! ; » et dans les guillemets.
+$nb = "\xC2\xA0";
+$fr = function ($t) use ($nb) {
+	return str_replace(array(' :', ' ?', ' !', ' ;', '« ', ' »'), array($nb . ':', $nb . '?', $nb . '!', $nb . ';', '«' . $nb, $nb . '»'), $t);
+};
+foreach ($edits as $id => $list) {
+	foreach ($list as $i => $e) {
+		$edits[$id][$i] = array($fr($e[0]), $fr($e[1]));
+	}
+}
+$lwm_errors = array();
 foreach ($j[0]['elements'][0]['elements'] as &$w) {
 	if (!isset($edits[$w['id']])) continue;
 	foreach ($edits[$w['id']] as $e) {
 		$n = substr_count($w['settings']['html'], $e[0]);
-		if (1 !== $n) { $errors[] = $w['id'] . ' : ' . $n . ' × ' . mb_substr($e[0], 0, 60); continue; }
+		if (1 !== $n) { $lwm_errors[] = $w['id'] . ' : ' . $n . ' × ' . mb_substr($e[0], 0, 60); continue; }
 		$w['settings']['html'] = str_replace($e[0], $e[1], $w['settings']['html']);
 	}
 }
@@ -74,12 +84,13 @@ $figs = array(
 $shots = "<div class='lwm'><section class='lwm-sec lwm-soft'><div class='lwm-w'><div class='lwm-hd-sec'><span class='lwm-kicker'>Aperçu</span><h2>Captures d’écran</h2></div><div style='display:flex;gap:20px;overflow-x:auto;padding:4px 4px 18px;scroll-snap-type:x mandatory;align-items:flex-start'>";
 foreach ($figs as $f) {
 	$src = $img . $f[0] . ('installeur-termine.webp' === $f[0] ? '' : $v);
+	$f[1]   = $fr($f[1]);
 	$shots .= "<figure style='margin:0;flex:0 0 min({$f[2]}px,85vw);scroll-snap-align:start'><img src='$src' alt='" . esc_attr($f[1]) . "' loading='lazy' style='width:100%;height:auto;border-radius:16px;border:1px solid #e2e5f2'><figcaption style='font-size:13px;margin-top:8px;color:#5A607F'>" . esc_html($f[1]) . "</figcaption></figure>";
 }
 $shots .= '</div></div></section></div>';
 foreach ($j[0]['elements'][0]['elements'] as &$w) { if ('lwbm-shots' === $w['id']) { $w['settings']['html'] = $shots; } }
 unset($w);
-if ($errors) return array('erreurs' => $errors);
+if ($lwm_errors) return array('erreurs' => $lwm_errors);
 if (!defined('LWM_SAVE')) return array('essai' => 'ok', 'remplacements' => 'tous trouvés');
 update_post_meta($p->ID, '_elementor_data_backup_v16', wp_slash($raw));
 update_post_meta($p->ID, '_elementor_data', wp_slash(wp_json_encode($j, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)));
