@@ -183,7 +183,7 @@ function fillInstaller() {
 		await login.fill('#user_pass', b);
 		await Promise.all([login.waitForNavigation(), login.click('#wp-submit')]);
 		const state = await ctx.storageState();
-		for (const tab of ['export', 'direct', 'import', 'settings']) {
+		for (const tab of ['export', 'direct', 'import', 'backups', 'settings']) {
 			await run(tab, { storageState: state }, async (p) => {
 				await p.goto(`${url}/wp-admin/admin.php?page=lwb-migration&tab=${tab}`);
 				await p.waitForTimeout(600);

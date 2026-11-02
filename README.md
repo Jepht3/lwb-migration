@@ -7,6 +7,7 @@ Extension WordPress qui migre un site complet (fichiers + base de données) vers
 - **Export** : un clic produit `archive-<aléatoire>.zip` + `installer.php` autonome.
 - **Import** : déposez les 2 fichiers à la racine du nouveau serveur (même vide), ouvrez `votre-domaine/installer.php`.
 - **Migration directe** : transfert de serveur à serveur en HTTPS, par morceaux, avec une clé signée HMAC (24 h, usage unique).
+- **Sauvegardes automatiques** : fréquence, heure, contenu (site complet ou base seule), rétention et notifications configurables ; restauration en un clic.
 
 Compatibilité : PHP 7.4 → 8.4, WordPress 5.8+, MySQL 5.6+ / MariaDB 10.1+. Aucune dépendance à `exec()`, `mysqldump`, `zip` CLI, SSH ou Composer. Fonctionne avec `max_execution_time = 30`, `memory_limit = 128M`, `upload_max_filesize = 2M`.
 
@@ -39,6 +40,16 @@ Compatibilité : PHP 7.4 → 8.4, WordPress 5.8+, MySQL 5.6+ / MariaDB 10.1+. Au
 - Le `.htaccess` est remplacé par la version WordPress standard ; l'original est conservé dans `.htaccess.lwb-original`.
 - Le journal complet est téléchargeable depuis l'installeur, et depuis la liste des paquets côté source.
 - L'extension elle-même n'est pas copiée sur le nouveau site.
+
+### Sauvegardes automatiques
+
+Onglet **Sauvegardes** :
+
+1. Activez les sauvegardes, puis choisissez la fréquence (deux fois par jour, quotidienne, hebdomadaire avec le jour, mensuelle avec le jour du mois), l'heure (fuseau du site), le contenu (site complet ou base de données seule), le nombre de sauvegardes conservées et la notification par e-mail (jamais, en cas d'échec, après chaque sauvegarde).
+2. **Sauvegarder maintenant** lance une sauvegarde immédiate (elle se termine en arrière-plan si la page est fermée).
+3. **Restaurer** remet le site dans l'état d'une sauvegarde : l'installeur s'ouvre, base préremplie. Chaque sauvegarde contient aussi `installer.php` : elle s'installe sur un autre serveur comme un paquet de migration.
+
+Fonctionnement : WP-Cron démarre la sauvegarde à l'heure prévue ; chaque étape (quelques secondes) relance la suivante par une requête GET signée (HMAC) vers le site lui-même. Si ces requêtes sont bloquées, un événement WP-Cron de secours reprend toutes les 3 minutes. Après 6 échecs consécutifs, la sauvegarde est abandonnée, l'échec est noté dans l'historique (avec le journal), notifié par e-mail et signalé dans l'administration. Les sauvegardes ont leur propre limite de conservation, distincte des paquets de migration.
 
 ### Paramètres
 

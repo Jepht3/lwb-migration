@@ -28,6 +28,7 @@ class Plugin {
 		load_plugin_textdomain( 'lwb-migration', false, dirname( plugin_basename( LWB_MIGRATION_FILE ) ) . '/languages' );
 		Ajax::register();
 		Updater::register();
+		Backups::register();
 		if ( is_admin() ) {
 			Admin::register();
 			add_action( 'admin_init', array( __CLASS__, 'cleanup_installer_leftovers' ) );

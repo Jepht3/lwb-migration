@@ -23,7 +23,8 @@ class Exporter {
 	/**
 	 * Démarre un export.
 	 *
-	 * @param array $args password (string), direct (array|null : informations du site distant).
+	 * @param array $args password (string), direct (array|null : informations du site distant),
+	 *                    kind (migration|backup), trigger (manual|auto), db_only (bool : base seule).
 	 * @return Job
 	 * @throws Migration_Exception Environnement inutilisable.
 	 */
@@ -51,16 +52,22 @@ class Exporter {
 			// Un installer.php sans mot de passe serait utilisable par n'importe quel visiteur.
 			$password = self::generate_password();
 		}
+		$kind    = isset( $args['kind'] ) && 'backup' === $args['kind'] ? 'backup' : 'migration';
+		$db_only = 'backup' === $kind && ! empty( $args['db_only'] );
 
 		$job = Job::create(
 			$jobs,
 			array(
 				'type'         => 'export',
+				'kind'         => $kind,
+				'trigger'      => isset( $args['trigger'] ) && 'auto' === $args['trigger'] ? 'auto' : 'manual',
+				'db_only'      => $db_only,
 				'phase'        => 'scan',
 				'direct'       => isset( $args['direct'] ) ? $args['direct'] : null,
 				'password'     => $password,
-				// Archive chiffrée avec le mot de passe de l'installeur (export classique uniquement).
-				'crypto'       => empty( $args['direct'] ) && ! empty( $settings['encrypt'] ) && Archive_Crypto::available()
+				// Archive chiffrée avec le mot de passe de l'installeur (export classique uniquement ;
+				// jamais pour une sauvegarde, qui doit rester restaurable en un clic).
+				'crypto'       => empty( $args['direct'] ) && 'backup' !== $kind && ! empty( $settings['encrypt'] ) && Archive_Crypto::available()
 					? array(
 						'salt'       => bin2hex( random_bytes( 16 ) ),
 						'iterations' => Archive_Crypto::ITERATIONS,
@@ -108,8 +115,17 @@ class Exporter {
 		}
 
 		$scanner = new File_Scanner( $job->path( 'files.list' ), $rules );
-		$scanner->add_root( $abspath, 'files' );
-		if ( $outside ) {
+		if ( $db_only ) {
+			// Base seule : wp-config.php suffit à l'installeur pour restaurer la base.
+			$log->info( 'Sauvegarde de la base de données uniquement (fichiers non inclus).' );
+		} else {
+			$scanner->add_root( $abspath, 'files' );
+		}
+		if ( $db_only ) {
+			if ( is_file( $abspath . '/wp-config.php' ) ) {
+				$scanner->add_single_file( $abspath . '/wp-config.php', 'files/wp-config.php' );
+			}
+		} elseif ( $outside ) {
 			$scanner->add_root( $content, 'files/wp-content' );
 			$log->info( 'Dossier wp-content situé hors de la racine : il sera restauré dans /wp-content.' );
 		}
@@ -176,6 +192,11 @@ class Exporter {
 			} while ( ! $rt->should_stop() );
 			$job->save();
 			$job->unlock();
+			if ( 'done' === $job->data['phase'] && 'backup' === ( isset( $job->data['kind'] ) ? $job->data['kind'] : '' ) && empty( $job->data['recorded'] ) ) {
+				$job->data['recorded'] = true;
+				$job->save();
+				Backups::record_success( $job );
+			}
 			return self::status( $job );
 		} catch ( Migration_Exception $e ) {
 			$log->error( $e->getMessage() . ( $e->get_solution() ? ' – ' . $e->get_solution() : '' ) );
@@ -445,8 +466,11 @@ class Exporter {
 			'db'             => array(),
 		);
 		Installer_Builder::build( $pkg_dir . '/installer.dat', $config );
-		$protected     = '' !== $d['password'];
-		$d['password'] = ''; // Seule l'empreinte bcrypt est conservée (dans installer.php).
+		$protected = '' !== $d['password'];
+		// Sauvegarde : le mot de passe d'installer.php reste consultable par l'administrateur
+		// (dossier protégé), pour pouvoir l'installer sur un autre serveur.
+		$backup_password = 'backup' === ( isset( $d['kind'] ) ? $d['kind'] : '' ) ? $d['password'] : '';
+		$d['password']   = ''; // Seule l'empreinte bcrypt est conservée (dans installer.php).
 
 		$meta = array(
 			'id'           => $job->id(),
@@ -460,14 +484,20 @@ class Exporter {
 			'protected'    => $protected,
 			'direct'       => ! empty( $d['direct'] ),
 			'warnings'     => $d['warnings'],
+			'kind'         => isset( $d['kind'] ) ? $d['kind'] : 'migration',
+			'trigger'      => isset( $d['trigger'] ) ? $d['trigger'] : 'manual',
+			'content'      => ! empty( $d['db_only'] ) ? 'database' : 'full',
 		);
+		if ( '' !== $backup_password ) {
+			$meta['installer_password'] = $backup_password;
+		}
 		Json_Store::write( $pkg_dir . '/package.php', $meta );
 		$job->logger()->info( sprintf( 'Paquet prêt : %s (%s), installer.php généré.', $d['archive_name'], Runtime::format_bytes( $archive_size ) ) );
 
 		foreach ( array( 'files.list', 'database.sql', 'index.bin' ) as $tmp ) {
 			@unlink( $job->path( $tmp ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 		}
-		self::enforce_retention( $job->id() );
+		self::enforce_retention( $job->id(), $meta['kind'] );
 		$d['package_dir'] = $pkg_dir;
 		$d['phase']       = empty( $d['direct'] ) ? 'done' : 'transfer';
 		if ( 'done' === $d['phase'] ) {
@@ -490,15 +520,17 @@ class Exporter {
 	}
 
 	/**
-	 * Supprime les paquets les plus anciens au-delà de la limite.
+	 * Supprime les paquets les plus anciens au-delà de la limite (par type : les sauvegardes
+	 * et les paquets de migration ont chacun leur propre limite).
 	 *
 	 * @param string $keep_id Paquet à conserver.
+	 * @param string $kind    migration|backup.
 	 * @return void
 	 */
-	private static function enforce_retention( $keep_id ) {
-		$settings = Settings::get();
-		$packages = self::list_packages();
-		$excess   = count( $packages ) - (int) $settings['keep_packages'];
+	private static function enforce_retention( $keep_id, $kind = 'migration' ) {
+		$limit    = 'backup' === $kind ? (int) Backups::settings()['keep'] : (int) Settings::get()['keep_packages'];
+		$packages = self::list_packages( $kind );
+		$excess   = count( $packages ) - $limit;
 		if ( $excess <= 0 ) {
 			return;
 		}
@@ -644,9 +676,10 @@ class Exporter {
 	/**
 	 * Liste des paquets (plus récents d'abord).
 	 *
+	 * @param string|null $kind migration|backup, ou null pour tous.
 	 * @return array[]
 	 */
-	public static function list_packages() {
+	public static function list_packages( $kind = null ) {
 		$dir   = Security::storage_dir( 'packages' );
 		$items = @scandir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		$out   = array();
@@ -656,6 +689,17 @@ class Exporter {
 			}
 			$meta = Json_Store::read( $dir . '/' . $item . '/package.php' );
 			if ( null === $meta || ! is_file( $dir . '/' . $item . '/' . $meta['archive'] ) ) {
+				continue;
+			}
+			$meta = array_merge(
+				array(
+					'kind'    => 'migration',
+					'trigger' => 'manual',
+					'content' => 'full',
+				),
+				$meta
+			);
+			if ( null !== $kind && $meta['kind'] !== $kind ) {
 				continue;
 			}
 			$meta['has_log'] = is_file( $dir . '/' . $item . '/log.php' );

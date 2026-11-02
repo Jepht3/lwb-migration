@@ -635,7 +635,7 @@ step( 'Scénario 1 – Installation sur http://localhost:8102 (autre dossier, ba
 mysql_root()->query( 'DROP DATABASE IF EXISTS lwb_e2e_dst' );
 start_server( 8102, $dst_root, 4, 'dst' );
 $dst_url = 'http://localhost:8102';
-layout_audit( array( 'admin', $src_url, 'admin', E2E_PASS ), 'administration (Exporter, Migration directe, Paramètres)' );
+layout_audit( array( 'admin', $src_url, 'admin', E2E_PASS ), 'administration (Exporter, Migration directe, Sauvegardes, Paramètres)' );
 layout_audit( array( 'installer', "$dst_url/installer.php", E2E_PKG_PASSWORD ), 'installeur (connexion et étapes, clair et sombre)' );
 $inst    = new Client( 'dst' );
 list( $api, $final ) = drive_installer(
@@ -1025,6 +1025,128 @@ $iic->request( $installer_i );
 list( $api_i ) = drive_installer( $iic, preg_replace( '/\?.*$/', '', $installer_i ), array() );
 verify_site( 'import', $i_url, $i_root, 'lwb_e2e_i', 'iwp_', $src_url, $src_abs );
 $api_i( 'cleanup' );
+
+/* ================================================================== */
+/* Scénario 7 : sauvegardes automatiques                                 */
+/* ================================================================== */
+
+step( 'Scénario 7 – Sauvegardes automatiques (WP-Cron, relais en arrière-plan, rétention, échec, restauration)' );
+$mail_log = sys_get_temp_dir() . '/lwb-e2e-mails-' . getmypid() . '.log';
+@unlink( $mail_log );
+@mkdir( "$src_abs/wp-content/mu-plugins" );
+// E-mails capturés ; relais en arrière-plan désactivable pour tester l'événement de secours.
+file_put_contents(
+	"$src_abs/wp-content/mu-plugins/lwb-test-backups.php",
+	"<?php\nadd_filter( 'pre_wp_mail', function ( \$r, \$a ) { file_put_contents( " . var_export( $mail_log, true ) . ", json_encode( array( \$a['to'], \$a['subject'], \$a['message'] ), JSON_UNESCAPED_UNICODE ) . \"\\n\", FILE_APPEND ); return true; }, 10, 2 );\n"
+	. "add_filter( 'lwb_migration_backup_loopback', function ( \$on ) { return \$on && ! get_option( 'lwb_test_no_loopback' ); } );\n"
+);
+$bstate = function () use ( $src_abs ) {
+	return json_decode( run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; echo json_encode( \LwbMigration\Backups::state() );' ), true );
+};
+$mails = function () use ( $mail_log ) {
+	return array_map( function ( $l ) { return json_decode( $l, true ); }, array_filter( explode( "\n", (string) @file_get_contents( $mail_log ) ) ) );
+};
+$wait_done = function ( $max_s ) use ( $bstate ) {
+	$t0 = time();
+	do {
+		sleep( 2 );
+		$st = $bstate();
+	} while ( '' !== $st['job'] && time() - $t0 < $max_s );
+	return array( $st, time() - $t0 );
+};
+
+$admin->ajax( $src_url, $nonce, 'settings_save', array( 'settings' => array( 'format' => 'auto', 'compress' => '1', 'default_exclude' => '1', 'keep_packages' => '5', 'exclude_exts' => 'log' ) ) );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_settings_save', array( 'backup' => array( 'enabled' => '1', 'frequency' => 'weekly', 'weekday' => '3', 'hour' => '4', 'content' => 'full', 'keep' => '2', 'notify' => 'always', 'email' => 'pas-une-adresse' ) ) );
+ok( empty( $j['success'] ) && false !== strpos( $j['data']['message'], 'e-mail' ), 'adresse de notification invalide refusée' );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_settings_save', array( 'backup' => array( 'enabled' => '1', 'frequency' => 'weekly', 'weekday' => '3', 'hour' => '4', 'content' => 'full', 'keep' => '2', 'notify' => 'always', 'email' => 'client@example.com' ) ) );
+ok( ! empty( $j['success'] ) && '' !== $j['data']['next'], 'réglages enregistrés, prochaine sauvegarde : ' . ( $j['data']['next'] ?? '?' ) );
+$sched = json_decode( run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; $s = \LwbMigration\Backups::settings(); $t = wp_next_scheduled( "lwb_migration_backup" ); echo json_encode( array( "t" => $t, "expected" => \LwbMigration\Schedule::next_run( $s, time(), wp_timezone() ), "local" => wp_date( "D H:i", $t ) ) );' ), true );
+ok( $sched['t'] && abs( $sched['t'] - $sched['expected'] ) < 60 && 'Wed 04:00' === $sched['local'], 'événement WP-Cron planifié le mercredi à 04:00 (heure du site) : ' . $sched['local'] );
+
+// 1) Déclenchement par WP-Cron : la sauvegarde doit se terminer seule (étapes de 0,25 s
+// enchaînées par le relais en arrière-plan ; l'événement de secours n'intervient qu'après 3 min).
+run_wp_php( $src_abs, 'define( "LWB_MIGRATION_STEP_BUDGET", 0.25 ); require ABSPATH_ . "/wp-load.php"; do_action( "lwb_migration_backup" );' );
+ok( '' !== $bstate()['job'], 'WP-Cron n’a fait qu’une étape de 0,25 s : la suite part en arrière-plan' );
+list( $st, $took ) = $wait_done( 170 );
+ok( '' === $st['job'] && 'ok' === $st['history'][0]['status'] && 'auto' === $st['history'][0]['trigger'], "sauvegarde automatique terminée seule par le relais en arrière-plan ({$took} s, sans navigateur ni événement de secours)" );
+$auto_id = $st['history'][0]['package'];
+$m       = $mails();
+ok( ! empty( $m ) && 'client@example.com' === end( $m )[0] && false !== strpos( end( $m )[1], 'Sauvegarde réussie' ), 'e-mail « Sauvegarde réussie » envoyé à l’adresse choisie' );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'packages', array( 'kind' => 'backup' ) );
+ok( 1 === count( $j['data'] ) && $auto_id === $j['data'][0]['id'] && 'auto' === $j['data'][0]['trigger'], 'sauvegarde listée dans l’onglet Sauvegardes' );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'packages' );
+ok( ! in_array( $auto_id, array_column( $j['data'], 'id' ), true ), 'les sauvegardes n’apparaissent pas dans les paquets de migration' );
+$migration_count = count( $j['data'] );
+
+// 2) Relais bloqué (pare-feu, hébergeur) : l'événement de secours termine la sauvegarde.
+run_wp_php( $src_abs, 'define( "LWB_MIGRATION_STEP_BUDGET", 0.25 ); require ABSPATH_ . "/wp-load.php"; update_option( "lwb_test_no_loopback", 1 ); do_action( "lwb_migration_backup" );' );
+$st      = $bstate();
+$job2    = $st['job'];
+$watch   = json_decode( run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; echo json_encode( wp_next_scheduled( "lwb_migration_backup_step", array( ' . var_export( $job2, true ) . ' ) ) );' ), true );
+ok( '' !== $job2 && $watch > time() + 60, 'relais bloqué : événement de secours programmé (+' . ( $watch - time() ) . ' s)' );
+$n = 0;
+while ( '' !== $bstate()['job'] && $n++ < 300 ) {
+	run_wp_php( $src_abs, 'define( "LWB_MIGRATION_STEP_BUDGET", 0.25 ); require ABSPATH_ . "/wp-load.php"; do_action( "lwb_migration_backup_step", ' . var_export( $job2, true ) . ' );' );
+}
+$st = $bstate();
+ok( '' === $st['job'] && 'ok' === $st['history'][0]['status'] && $n > 1, "sauvegarde terminée par l’événement de secours ($n passages)" );
+run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; delete_option( "lwb_test_no_loopback" );' );
+
+// 3) Sauvegarde manuelle de la base seule, depuis l'interface ; rétention à 2.
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_settings_save', array( 'backup' => array( 'enabled' => '1', 'frequency' => 'daily', 'hour' => '3', 'content' => 'database', 'keep' => '2', 'notify' => 'failure', 'email' => 'client@example.com' ) ) );
+$mails_before = count( $mails() );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_start' );
+ok( ! empty( $j['success'] ), '« Sauvegarder maintenant » démarré' );
+drive_job( $admin, $src_url, $nonce, $j['data']['job'] );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'packages', array( 'kind' => 'backup' ) );
+$ids = array_column( $j['data'], 'id' );
+ok( 2 === count( $j['data'] ) && 'database' === $j['data'][0]['content'] && 'manual' === $j['data'][0]['trigger'] && ! in_array( $auto_id, $ids, true ), 'rétention : 2 sauvegardes conservées, la plus ancienne supprimée' );
+list( $r, $jm ) = $admin->ajax( $src_url, $nonce, 'packages' );
+ok( count( $jm['data'] ) === $migration_count, 'paquets de migration intacts (limite séparée)' );
+ok( count( $mails() ) === $mails_before, 'notification « en cas d’échec » : aucun e-mail pour une réussite' );
+$dbzip = E2E_WORK . '/backup-db.zip';
+$admin->download( $j['data'][0]['urls']['archive'], $dbzip );
+$z     = new ZipArchive();
+$z->open( $dbzip );
+$names = array();
+for ( $i = 0; $i < $z->numFiles; $i++ ) {
+	$names[] = $z->getNameIndex( $i );
+}
+$z->close();
+$file_entries = array_values( array_filter( $names, function ( $n ) { return 0 === strpos( $n, 'files/' ) && '/' !== substr( $n, -1 ); } ) );
+ok( in_array( 'database.sql', $names, true ) && array( 'files/wp-config.php' ) === $file_entries, 'base seule : database.sql + wp-config.php, aucun autre fichier (' . count( $names ) . ' entrées)' );
+$full_id = $ids[1];
+
+// 4) Échec : e-mail et avis dans l'administration.
+$mails_before = count( $mails() );
+run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; ini_set( "open_basedir", ABSPATH . "wp-includes" . PATH_SEPARATOR . WP_PLUGIN_DIR . PATH_SEPARATOR . sys_get_temp_dir() ); \LwbMigration\Backups::start_background( "auto" );' );
+$st = $bstate();
+ok( 'error' === $st['history'][0]['status'] && '' !== $st['history'][0]['message'], 'échec enregistré dans l’historique : ' . $st['history'][0]['message'] );
+$m = $mails();
+ok( count( $m ) === $mails_before + 1 && false !== strpos( end( $m )[1], 'Échec' ), 'e-mail d’échec envoyé (notification « en cas d’échec »)' );
+$notice = run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; wp_set_current_user( 1 ); \LwbMigration\Backups::failure_notice();' );
+ok( false !== strpos( $notice, 'dernière sauvegarde automatique a échoué' ), 'avis d’échec affiché dans l’administration' );
+
+// 5) Restauration en un clic de la sauvegarde complète.
+run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; update_option( "blogname", "Modifié après la sauvegarde" );' );
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_restore', array( 'package' => $full_id ) );
+ok( ! empty( $j['success'] ) && false !== strpos( $j['data']['installer_url'], 'lwb_token=' ), 'restauration préparée : installeur à jeton déposé sur le site' );
+$rc = new Client( 'restore' );
+$rc->request( $j['data']['installer_url'] );
+list( $api_r, $final_r ) = drive_installer( $rc, "$src_url/installer.php", array() );
+$api_r( 'cleanup' );
+$after = json_decode( run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; echo json_encode( array( "name" => get_option( "blogname" ), "url" => get_option( "siteurl" ), "backups" => count( \LwbMigration\Exporter::list_packages( "backup" ) ) ) );' ), true );
+ok( 'Site Source LWB' === $after['name'] && $src_url === $after['url'], 'site restauré à l’état de la sauvegarde (titre d’origine, même adresse)' );
+ok( 2 === $after['backups'] && ! glob( "$src_abs/archive-*" ) && ! is_file( "$src_abs/installer.php" ), 'sauvegardes conservées après restauration ; archive et installeur retirés de la racine' );
+ok( $admin->wp_login( $src_url, 'admin', E2E_PASS ), 'connexion à l’administration après restauration' );
+$nonce = $admin->nonce( $src_url );
+
+// 6) Désactivation : plus aucun événement.
+list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_settings_save', array( 'backup' => array( 'frequency' => 'daily', 'hour' => '3' ) ) );
+$left = run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; echo wp_next_scheduled( "lwb_migration_backup" ) ? "oui" : "non";' );
+ok( ! empty( $j['success'] ) && 'non' === $left, 'sauvegardes désactivées : plus d’événement planifié' );
+@unlink( "$src_abs/wp-content/mu-plugins/lwb-test-backups.php" );
+@unlink( $mail_log );
 
 /* ================================================================== */
 /* Scénario 4 : mises à jour automatiques                                */

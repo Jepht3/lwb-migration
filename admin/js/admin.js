@@ -264,18 +264,48 @@
 		return el( 'span', { className: 'dashicons dashicons-' + name, 'aria-hidden': 'true' } );
 	}
 
+	function packagesBody() {
+		return $( '#lwbm-packages-body' ) || $( '#lwbm-backups-body' );
+	}
+
+	function restoreBackup( p, btn ) {
+		if ( ! window.confirm( __( 'Restaurer cette sauvegarde ? Les fichiers et la base de données actuels du site seront remplacés par ceux de la sauvegarde.' ) ) ) {
+			return;
+		}
+		btn.disabled = true;
+		post( 'backup_restore', { package: p.id } ).then( function ( res ) {
+			if ( ! res.ok ) {
+				btn.disabled = false;
+				notice( res.data.message, res.data.solution );
+				return;
+			}
+			/* L'installeur prend le relais : vérification, base préremplie, restauration. */
+			window.location.href = res.data.installer_url;
+		} ).catch( function ( e ) {
+			btn.disabled = false;
+			notice( e.message );
+		} );
+	}
+
 	function renderPackages( list ) {
-		var body = $( '#lwbm-packages-body' );
+		var body = packagesBody();
 		if ( ! body ) {
 			return;
 		}
+		var isBackup = 'backup' === body.getAttribute( 'data-lwbm-kind' );
 		body.textContent = '';
 		if ( ! list.length ) {
-			body.appendChild( el( 'div', { className: 'lwbm-empty', text: __( 'Aucun paquet pour le moment. Cliquez sur « Exporter le site » pour en créer un.' ) } ) );
+			body.appendChild( el( 'div', { className: 'lwbm-empty', text: isBackup ? __( 'Aucune sauvegarde pour le moment. Activez les sauvegardes automatiques ou cliquez sur « Sauvegarder maintenant ».' ) : __( 'Aucun paquet pour le moment. Cliquez sur « Exporter le site » pour en créer un.' ) } ) );
 			return;
 		}
 		list.forEach( function ( p ) {
 			var badges = [];
+			if ( isBackup ) {
+				badges.push( el( 'span', { className: 'lwbm-pill ' + ( 'auto' === p.trigger ? 'lwbm-pill-info' : '' ) }, [ 'auto' === p.trigger ? __( 'automatique' ) : __( 'manuelle' ) ] ) );
+				if ( 'database' === p.content ) {
+					badges.push( el( 'span', { className: 'lwbm-pill lwbm-pill-accent' }, [ __( 'base de données seule' ) ] ) );
+				}
+			}
 			if ( p.protected ) {
 				badges.push( el( 'span', { className: 'lwbm-pill lwbm-pill-info' }, [ icon( 'lock' ), __( 'protégé' ) ] ) );
 			}
@@ -285,17 +315,23 @@
 			if ( p.warnings > 0 ) {
 				badges.push( el( 'span', { className: 'lwbm-pill lwbm-pill-warn' }, [ p.warnings + ' ' + __( 'avertissement(s)' ) ] ) );
 			}
+			var restore = null;
+			if ( isBackup ) {
+				restore = el( 'button', { type: 'button', className: 'lwbm-btn lwbm-btn-primary lwbm-btn-sm' }, [ icon( 'backup' ), __( 'Restaurer' ) ] );
+				restore.addEventListener( 'click', function () { restoreBackup( p, restore ); } );
+			}
 			var actions = el( 'div', { className: 'lwbm-package-actions' }, [
+				restore,
 				el( 'a', { className: 'lwbm-btn lwbm-btn-soft lwbm-btn-sm', href: p.urls.archive }, [ icon( 'download' ), __( 'Archive' ) ] ),
 				el( 'a', { className: 'lwbm-btn lwbm-btn-ghost lwbm-btn-sm', href: p.urls.installer }, [ icon( 'media-code' ), 'installer.php' ] ),
 				p.urls.log ? el( 'a', { className: 'lwbm-btn lwbm-btn-ghost lwbm-btn-sm', href: p.urls.log, title: __( 'Journal' ) }, [ icon( 'media-text' ), __( 'Journal' ) ] ) : null,
 			] );
 			var del = el( 'button', { type: 'button', className: 'lwbm-btn lwbm-btn-danger lwbm-btn-sm lwbm-btn-icon', title: __( 'Supprimer' ), 'aria-label': __( 'Supprimer' ) }, [ icon( 'trash' ) ] );
 			del.addEventListener( 'click', function () {
-				if ( ! window.confirm( __( 'Supprimer définitivement ce paquet ?' ) ) ) {
+				if ( ! window.confirm( isBackup ? __( 'Supprimer définitivement cette sauvegarde ?' ) : __( 'Supprimer définitivement ce paquet ?' ) ) ) {
 					return;
 				}
-				post( 'package_delete', { package: p.id } ).then( function ( res ) {
+				post( 'package_delete', { package: p.id, kind: isBackup ? 'backup' : 'migration' } ).then( function ( res ) {
 					if ( res.ok ) {
 						renderPackages( res.data );
 					} else {
@@ -308,6 +344,10 @@
 				el( 'span', { className: 'lwbm-package-icon', text: p.format } ),
 				el( 'div', { className: 'lwbm-package-main' }, [
 					el( 'div', { className: 'lwbm-package-title' }, [ p.date ].concat( badges ) ),
+					isBackup && p.password ? el( 'details', { className: 'lwbm-package-password' }, [
+						el( 'summary', { text: __( 'Mot de passe de installer.php (pour installer cette sauvegarde sur un autre serveur)' ) } ),
+						el( 'code', { text: p.password } ),
+					] ) : null,
 					el( 'div', { className: 'lwbm-package-meta' }, [
 						el( 'span', {}, [ icon( 'database' ), p.size ] ),
 						el( 'span', {}, [ icon( 'media-default' ), p.files + ' ' + __( 'fichiers' ) ] ),
@@ -321,10 +361,11 @@
 	}
 
 	function loadPackages() {
-		if ( ! $( '#lwbm-packages-body' ) ) {
+		var body = packagesBody();
+		if ( ! body ) {
 			return Promise.resolve( [] );
 		}
-		return post( 'packages' ).then( function ( res ) {
+		return post( 'packages', { kind: body.getAttribute( 'data-lwbm-kind' ) || 'migration' } ).then( function ( res ) {
 			if ( res.ok ) {
 				renderPackages( res.data );
 				return res.data;
@@ -756,6 +797,152 @@
 	}
 
 	/* ------------------------------------------------------------------ */
+	/* Onglet Sauvegardes                                                  */
+	/* ------------------------------------------------------------------ */
+
+	function stateItem( label, value, ok ) {
+		return el( 'li', { className: false === ok ? 'is-warn' : 'is-ok' }, [
+			el( 'span', { className: 'lwbm-env-dot', 'aria-hidden': 'true' } ),
+			el( 'span', { className: 'lwbm-env-label', text: label } ),
+			el( 'strong', { text: value } ),
+		] );
+	}
+
+	function renderBackupState( st ) {
+		var box = $( '#lwbm-backup-state' );
+		if ( box ) {
+			var last = st.history && st.history[ 0 ];
+			box.textContent = '';
+			box.appendChild( stateItem( __( 'Sauvegardes automatiques' ), st.enabled ? __( 'Activées' ) : __( 'Désactivées' ), !! st.enabled ) );
+			box.appendChild( stateItem( __( 'Prochaine sauvegarde' ), st.running ? __( 'En cours…' ) : ( st.next || '—' ), true ) );
+			box.appendChild( stateItem( __( 'Dernière sauvegarde' ), last ? last.date + ( 'ok' === last.status ? '' : ' – ' + __( 'échec' ) ) : __( 'Aucune' ), ! last || 'ok' === last.status ) );
+			box.appendChild( stateItem( __( 'Espace utilisé' ), st.used, true ) );
+			if ( st.free ) {
+				box.appendChild( stateItem( __( 'Espace libre sur le serveur' ), st.free, true ) );
+			}
+		}
+		var hist = $( '#lwbm-backup-history' );
+		if ( hist ) {
+			hist.textContent = '';
+			if ( ! st.history || ! st.history.length ) {
+				hist.appendChild( el( 'li', { className: 'lwbm-empty', text: __( 'Aucune sauvegarde effectuée pour le moment.' ) } ) );
+			}
+			( st.history || [] ).forEach( function ( h ) {
+				var ok = 'ok' === h.status;
+				var meta = [ 'auto' === h.trigger ? __( 'automatique' ) : __( 'manuelle' ), 'database' === h.content ? __( 'base de données seule' ) : __( 'site complet' ) ];
+				if ( h.size ) {
+					meta.push( h.size );
+				}
+				if ( h.duration ) {
+					meta.push( h.duration );
+				}
+				var item = el( 'li', { className: 'lwbm-history-item ' + ( ok ? 'is-ok' : 'is-error' ) }, [
+					el( 'span', { className: 'lwbm-history-dot', 'aria-hidden': 'true' } ),
+					el( 'div', { className: 'lwbm-history-main' }, [
+						el( 'strong', { text: h.date + ' – ' + ( ok ? __( 'réussie' ) : __( 'échec' ) ) } ),
+						el( 'span', { className: 'lwbm-hint', text: meta.join( ' · ' ) } ),
+						h.message ? el( 'p', { className: 'lwbm-history-msg', text: h.message } ) : null,
+						h.log ? el( 'details', {}, [ el( 'summary', { text: __( 'Journal' ) } ), el( 'pre', { className: 'lwbm-log', text: h.log } ) ] ) : null,
+					] ),
+				] );
+				hist.appendChild( item );
+			} );
+		}
+	}
+
+	function initBackups() {
+		var form = $( '#lwbm-backup-form' );
+		if ( ! form ) {
+			return;
+		}
+		var section = form.closest( '.lwbm-card' );
+		var panel = $( '[data-lwbm-progress]', section );
+		var now = $( '#lwbm-backup-now' );
+		var runner = null;
+
+		function sync() {
+			var enabled = $( '#lwbm-b-enabled' ).checked;
+			var freq = $( '#lwbm-b-frequency' ).value;
+			$( '[data-lwbm-backup-fields]', form ).classList.toggle( 'is-off', ! enabled );
+			$all( '[data-lwbm-when]', form ).forEach( function ( row ) {
+				row.hidden = row.getAttribute( 'data-lwbm-when' ) !== freq;
+			} );
+			$( '[data-lwbm-when-notify]', form ).hidden = 'never' === $( '#lwbm-b-notify' ).value;
+		}
+		$all( 'input, select', form ).forEach( function ( input ) {
+			input.addEventListener( 'change', sync );
+		} );
+		sync();
+
+		function refresh() {
+			return post( 'backup_status' ).then( function ( res ) {
+				if ( res.ok ) {
+					renderBackupState( res.data );
+					if ( res.data.running && ! runner ) {
+						follow( res.data.running );
+					}
+				}
+				return res.data;
+			} ).catch( function () {} );
+		}
+
+		/* Suit (et accélère) une sauvegarde en cours, automatique ou manuelle. */
+		function follow( d ) {
+			now.disabled = true;
+			runner = new Runner( panel, d.job, function () {
+				runner = null;
+				now.disabled = false;
+				notice( __( 'Sauvegarde terminée.' ), '', true );
+				loadPackages();
+				refresh();
+			}, function () {
+				runner = null;
+				now.disabled = false;
+				refresh();
+			} );
+			runner.show();
+			runner.update( d );
+			runner.run();
+		}
+
+		form.addEventListener( 'submit', function ( ev ) {
+			ev.preventDefault();
+			var fields = {};
+			$all( 'input, select', form ).forEach( function ( input ) {
+				if ( ! input.name || ( 'checkbox' === input.type && ! input.checked ) ) {
+					return;
+				}
+				fields[ 'backup[' + input.name + ']' ] = input.value;
+			} );
+			post( 'backup_settings_save', fields ).then( function ( res ) {
+				notice( res.data.message, res.ok ? ( res.data.next ? __( 'Prochaine sauvegarde :' ) + ' ' + res.data.next : '' ) : res.data.solution, res.ok );
+				if ( res.ok ) {
+					renderBackupState( res.data );
+				}
+			} ).catch( function ( e ) { notice( e.message ); } );
+		} );
+
+		now.addEventListener( 'click', function () {
+			notice( '' );
+			now.disabled = true;
+			post( 'backup_start' ).then( function ( res ) {
+				if ( ! res.ok ) {
+					now.disabled = false;
+					notice( res.data.message, res.data.solution );
+					return;
+				}
+				follow( res.data );
+			} ).catch( function ( e ) {
+				now.disabled = false;
+				notice( e.message );
+			} );
+		} );
+
+		loadPackages();
+		refresh();
+	}
+
+	/* ------------------------------------------------------------------ */
 	/* Onglet Paramètres                                                   */
 	/* ------------------------------------------------------------------ */
 
@@ -844,6 +1031,7 @@
 		initExport();
 		initDirect();
 		initImport();
+		initBackups();
 		initSettings();
 	} );
 }() );

@@ -20,7 +20,7 @@ class Ajax {
 	 * @return void
 	 */
 	public static function register() {
-		$actions = array( 'export_start', 'job_step', 'job_cancel', 'packages', 'package_delete', 'settings_save', 'key_generate', 'key_revoke', 'direct_start', 'download', 'check_update' );
+		$actions = array( 'export_start', 'job_step', 'job_cancel', 'packages', 'package_delete', 'settings_save', 'key_generate', 'key_revoke', 'direct_start', 'download', 'check_update', 'backup_settings_save', 'backup_start', 'backup_status', 'backup_restore' );
 		foreach ( $actions as $action ) {
 			add_action( 'wp_ajax_lwb_migration_' . $action, array( __CLASS__, $action ) );
 		}
@@ -141,7 +141,7 @@ class Ajax {
 	public static function packages() {
 		Security::check_ajax();
 		try {
-			wp_send_json_success( self::packages_payload() );
+			wp_send_json_success( self::packages_payload( 'backup' === Security::post_text( 'kind' ) ? 'backup' : 'migration' ) );
 		} catch ( \Throwable $e ) {
 			self::fail( $e );
 		}
@@ -150,11 +150,12 @@ class Ajax {
 	/**
 	 * Données des paquets pour l'interface.
 	 *
+	 * @param string $kind migration|backup.
 	 * @return array[]
 	 */
-	public static function packages_payload() {
+	public static function packages_payload( $kind = 'migration' ) {
 		$out = array();
-		foreach ( Exporter::list_packages() as $p ) {
+		foreach ( Exporter::list_packages( $kind ) as $p ) {
 			$base  = array(
 				'action'  => 'lwb_migration_download',
 				'package' => $p['id'],
@@ -171,6 +172,9 @@ class Ajax {
 				'direct'    => ! empty( $p['direct'] ),
 				'warnings'  => (int) $p['warnings'],
 				'archive'   => $p['archive'],
+				'trigger'   => $p['trigger'],
+				'content'   => $p['content'],
+				'password'  => 'backup' === $kind && isset( $p['installer_password'] ) ? (string) $p['installer_password'] : '',
 				'urls'      => array(
 					'archive'   => add_query_arg( array_merge( $base, array( 'file' => 'archive' ) ), admin_url( 'admin-ajax.php' ) ),
 					'installer' => add_query_arg( array_merge( $base, array( 'file' => 'installer' ) ), admin_url( 'admin-ajax.php' ) ),
@@ -188,7 +192,8 @@ class Ajax {
 	 */
 	public static function package_delete() {
 		Security::check_ajax();
-		$id = Security::post_text( 'package' );
+		$id   = Security::post_text( 'package' );
+		$kind = 'backup' === Security::post_text( 'kind' ) ? 'backup' : 'migration';
 		if ( ! Exporter::delete_package( $id ) ) {
 			wp_send_json_error(
 				array(
@@ -197,7 +202,7 @@ class Ajax {
 				)
 			);
 		}
-		wp_send_json_success( self::packages_payload() );
+		wp_send_json_success( self::packages_payload( $kind ) );
 	}
 
 	/**
@@ -355,6 +360,105 @@ class Ajax {
 					Exporter::status( $job )
 				)
 			);
+		} catch ( \Throwable $e ) {
+			self::fail( $e );
+		}
+	}
+
+	/**
+	 * Enregistre les réglages des sauvegardes automatiques.
+	 *
+	 * @return void
+	 */
+	public static function backup_settings_save() {
+		Security::check_ajax();
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce vérifié ; valeurs validées par Backups::save().
+		$raw = isset( $_POST['backup'] ) && is_array( $_POST['backup'] ) ? wp_unslash( $_POST['backup'] ) : array();
+		try {
+			Backups::save( $raw );
+			wp_send_json_success(
+				array_merge(
+					array( 'message' => __( 'Réglages des sauvegardes enregistrés.', 'lwb-migration' ) ),
+					self::backup_status_payload()
+				)
+			);
+		} catch ( \Throwable $e ) {
+			self::fail( $e );
+		}
+	}
+
+	/**
+	 * Lance une sauvegarde maintenant (pilotée par le navigateur, poursuivie en arrière-plan
+	 * si la page est fermée).
+	 *
+	 * @return void
+	 */
+	public static function backup_start() {
+		Security::check_ajax();
+		try {
+			$running = Backups::running_job();
+			if ( null !== $running ) {
+				wp_send_json_success( array_merge( array( 'job' => $running->id() ), Exporter::status( $running ) ) );
+			}
+			$job = Backups::start_manual();
+			wp_send_json_success( array_merge( array( 'job' => $job->id() ), Exporter::status( $job ) ) );
+		} catch ( \Throwable $e ) {
+			self::fail( $e );
+		}
+	}
+
+	/**
+	 * État des sauvegardes (prochaine, en cours, historique, espace disque).
+	 *
+	 * @return void
+	 */
+	public static function backup_status() {
+		Security::check_ajax();
+		wp_send_json_success( self::backup_status_payload() );
+	}
+
+	/**
+	 * Données d'état pour l'interface.
+	 *
+	 * @return array
+	 */
+	public static function backup_status_payload() {
+		$fmt     = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		$next    = Backups::next_scheduled();
+		$running = Backups::running_job();
+		$disk    = Backups::disk_usage();
+		$history = array();
+		foreach ( Backups::state()['history'] as $h ) {
+			$history[] = array(
+				'date'     => wp_date( $fmt, (int) $h['time'] ),
+				'status'   => $h['status'],
+				'trigger'  => isset( $h['trigger'] ) ? $h['trigger'] : 'auto',
+				'content'  => isset( $h['content'] ) ? $h['content'] : 'full',
+				'size'     => ! empty( $h['size'] ) ? Runtime::format_bytes( (int) $h['size'] ) : '',
+				'duration' => ! empty( $h['duration'] ) ? human_time_diff( 0, (int) $h['duration'] ) : '',
+				'message'  => isset( $h['message'] ) ? (string) $h['message'] : '',
+				'log'      => isset( $h['log'] ) ? (string) $h['log'] : '',
+			);
+		}
+		return array(
+			'enabled' => Backups::settings()['enabled'],
+			'next'    => $next ? wp_date( $fmt, $next ) : '',
+			'running' => $running ? array_merge( array( 'job' => $running->id() ), Exporter::status( $running ) ) : null,
+			'history' => $history,
+			'used'    => Runtime::format_bytes( $disk['used'] ),
+			'free'    => null === $disk['free'] ? '' : Runtime::format_bytes( $disk['free'] ),
+		);
+	}
+
+	/**
+	 * Prépare la restauration d'une sauvegarde et renvoie l'adresse de l'installeur.
+	 *
+	 * @return void
+	 */
+	public static function backup_restore() {
+		Security::check_ajax();
+		try {
+			wp_send_json_success( array( 'installer_url' => Backups::prepare_restore( Security::post_text( 'package' ) ) ) );
 		} catch ( \Throwable $e ) {
 			self::fail( $e );
 		}

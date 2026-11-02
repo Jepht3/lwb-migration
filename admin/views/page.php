@@ -16,6 +16,7 @@ $lwbm_icons  = array(
 	'export'   => 'dashicons-download',
 	'direct'   => 'dashicons-cloud-upload',
 	'import'   => 'dashicons-upload',
+	'backups'  => 'dashicons-backup',
 	'settings' => 'dashicons-admin-generic',
 );
 ?>

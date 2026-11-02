@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,6 +22,8 @@ Déposez les deux fichiers à la racine du nouveau serveur, ouvrez `votre-domain
 **Migration directe** : collez sur le site source une clé générée par le site de destination, et le transfert se fait de serveur à serveur, en HTTPS, par morceaux, sans rien télécharger sur votre ordinateur.
 
 **Chez tous les hébergeurs** : si le pare-feu de la destination bloque les envois, la destination télécharge elle-même l’archive (lien signé, temporaire et reprenable). Le site peut être migré **avant le changement de DNS**, en joignant le nouveau serveur par son adresse IP ou son URL temporaire. Et sans FTP ni migration directe, l’onglet **Importer** du site de destination reçoit l’archive par petits morceaux, depuis le navigateur.
+
+**Sauvegardes automatiques** : choisissez la fréquence (deux fois par jour, chaque jour, chaque semaine ou chaque mois), l'heure, le contenu (site complet ou base de données seule), le nombre de sauvegardes conservées et les notifications par e-mail. Chaque sauvegarde se restaure en un clic, ou s'installe sur un autre serveur avec son installer.php.
 
 = Conçu pour les hébergements les plus limités =
 
@@ -58,6 +60,14 @@ Déposez les deux fichiers à la racine du nouveau serveur, ouvrez `votre-domain
 3. Ouvrez le menu **Lwb Migration**.
 
 == Frequently Asked Questions ==
+
+= Comment fonctionnent les sauvegardes automatiques ? =
+
+WP-Cron lance la sauvegarde à l'heure prévue (fuseau horaire du site). Elle avance ensuite par petites étapes en arrière-plan, sans ralentir le site ni nécessiter de navigateur ouvert. Sur un site peu visité, une tâche cron de l'hébergeur vers wp-cron.php garantit l'heure exacte. Les sauvegardes sont stockées dans un dossier protégé du serveur : téléchargez-en régulièrement une copie.
+
+= Comment restaurer une sauvegarde ? =
+
+Onglet Sauvegardes › « Restaurer » : l'installeur s'ouvre avec la base de données préremplie et remet le site dans l'état de la sauvegarde. Les sauvegardes elles-mêmes sont conservées.
 
 = L’extension est-elle copiée sur le nouveau site ? =
 
@@ -98,6 +108,13 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.6.0 =
+* Nouveau : sauvegardes automatiques configurables (fréquence, jour, heure, site complet ou base de données seule, nombre de sauvegardes conservées, notification par e-mail en cas d'échec ou après chaque sauvegarde)
+* Nouveau : restauration d'une sauvegarde en un clic
+* Nouveau : « Sauvegarder maintenant », état (prochaine et dernière sauvegarde, espace utilisé) et historique avec journal des échecs
+* Exécution en arrière-plan par petites étapes, avec reprise automatique même si l'hébergeur bloque les requêtes internes
+* Avis dans l'administration si la dernière sauvegarde automatique a échoué
 
 = 1.5.0 =
 * Migration avant le changement de DNS : dans les options avancées de la migration directe, indiquez l’adresse IP du nouveau serveur (le nom de domaine, l’en-tête Host et la vérification du certificat SSL sont conservés, comme curl --resolve) ou son URL temporaire. Le site source pilote lui-même l’installeur du nouveau serveur, que le navigateur ne peut pas encore atteindre ; le site est installé avec son adresse définitive et la ligne du fichier hosts est proposée pour le vérifier avant la bascule
