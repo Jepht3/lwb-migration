@@ -53,7 +53,8 @@ class Exporter {
 			$password = self::generate_password();
 		}
 		$kind    = isset( $args['kind'] ) && 'backup' === $args['kind'] ? 'backup' : 'migration';
-		$db_only = 'backup' === $kind && ! empty( $args['db_only'] );
+		$db_only = ! empty( $args['db_only'] ) && empty( $args['direct'] );
+		$encrypt = isset( $args['encrypt'] ) ? (bool) $args['encrypt'] : ! empty( $settings['encrypt'] );
 
 		$job = Job::create(
 			$jobs,
@@ -67,7 +68,7 @@ class Exporter {
 				'password'     => $password,
 				// Archive chiffrée avec le mot de passe de l'installeur (export classique uniquement ;
 				// jamais pour une sauvegarde, qui doit rester restaurable en un clic).
-				'crypto'       => empty( $args['direct'] ) && 'backup' !== $kind && ! empty( $settings['encrypt'] ) && Archive_Crypto::available()
+				'crypto'       => empty( $args['direct'] ) && 'backup' !== $kind && $encrypt && Archive_Crypto::available()
 					? array(
 						'salt'       => bin2hex( random_bytes( 16 ) ),
 						'iterations' => Archive_Crypto::ITERATIONS,
@@ -746,13 +747,32 @@ class Exporter {
 		}
 		switch ( $file ) {
 			case 'archive':
-				return array( $dir . '/' . basename( $meta['archive'] ), basename( $meta['archive'] ) );
+				return array( $dir . '/' . basename( $meta['archive'] ), self::download_name( $meta ) );
 			case 'installer':
 				return array( $dir . '/installer.dat', 'installer.php' );
 			case 'log':
 				return array( $dir . '/log.php', 'lwb-migration-log-' . gmdate( 'Ymd-His', $meta['created'] ) . '.txt' );
 		}
 		return null;
+	}
+
+	/**
+	 * Nom lisible du fichier à télécharger : site, date, et une partie aléatoire (celle du
+	 * nom stocké) pour qu'une archive déposée sur un serveur ne soit pas devinable.
+	 * L'import et installer.php identifient l'archive par son contenu, pas par son nom.
+	 *
+	 * @param array $meta Métadonnées du paquet.
+	 * @return string
+	 */
+	public static function download_name( array $meta ) {
+		$archive = basename( (string) $meta['archive'] );
+		$ext     = (string) pathinfo( $archive, PATHINFO_EXTENSION );
+		$rand    = preg_match( '/^archive-([a-f0-9]{16})/', $archive, $m ) ? $m[1] : substr( md5( $archive ), 0, 16 );
+		$host    = (string) wp_parse_url( isset( $meta['site_url'] ) ? $meta['site_url'] : home_url(), PHP_URL_HOST );
+		$slug    = trim( (string) preg_replace( '/[^a-z0-9]+/', '-', strtolower( preg_replace( '/^www\./', '', $host ) ) ), '-' );
+		$kind    = isset( $meta['kind'] ) && 'backup' === $meta['kind'] ? '-sauvegarde' : '';
+		$date    = gmdate( 'Y-m-d', (int) ( isset( $meta['created'] ) ? $meta['created'] : time() ) );
+		return ( '' !== $slug ? $slug : 'site' ) . $kind . '-' . $date . '-' . $rand . ( '' !== $ext ? '.' . $ext : '' );
 	}
 
 	/**

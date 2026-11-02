@@ -1,6 +1,7 @@
 <?php
 /**
- * Onglet « Importer » : envoi d'une archive depuis le navigateur, sans FTP.
+ * Section « Importer un site » : un seul fichier, envoyé depuis le navigateur (sans FTP),
+ * puis restauré sur ce site.
  *
  * @package LwbMigration
  */
@@ -10,65 +11,66 @@ defined( 'ABSPATH' ) || exit;
 $lwbm_import = true;
 $lwbm_chunk  = \LwbMigration\Upload_Import::chunk_size();
 ?>
-<section class="lwbm-banner">
-	<span class="lwbm-icon lwbm-icon-primary" aria-hidden="true"><span class="dashicons dashicons-upload"></span></span>
-	<div>
-		<h2><?php esc_html_e( 'Importer une archive, sans FTP', 'lwb-migration' ); ?></h2>
-		<p><?php esc_html_e( 'Envoyez ici l’archive créée par l’onglet « Exporter » du site source : elle est transmise par petits morceaux, compatibles avec les limites de ce serveur, puis l’installation démarre comme en migration directe.', 'lwb-migration' ); ?></p>
-	</div>
-</section>
-
-<div class="lwbm-grid lwbm-grid-2 lwbm-import">
-	<section class="lwbm-card">
-		<div class="lwbm-card-head">
-			<span class="lwbm-step-badge">1</span>
-			<div>
-				<span class="lwbm-eyebrow"><?php esc_html_e( 'Sur ce site (destination)', 'lwb-migration' ); ?></span>
-				<h2><?php esc_html_e( 'Choisir l’archive', 'lwb-migration' ); ?></h2>
-			</div>
-		</div>
-		<div class="lwbm-callout lwbm-callout-warn"><span class="dashicons dashicons-warning" aria-hidden="true"></span><p><?php esc_html_e( 'Tout le contenu de ce site (fichiers et base de données) sera remplacé par celui de l’archive. L’ancien site est mis de côté et peut être restauré depuis l’installeur.', 'lwb-migration' ); ?></p></div>
-		<div class="lwbm-field">
-			<label for="lwbm-import-file"><?php esc_html_e( 'Archive (archive-….zip, .lwb ou .lwbenc)', 'lwb-migration' ); ?></label>
+<div class="lwbm-split lwbm-import">
+	<section class="lwbm-card lwbm-split-main">
+		<label class="lwbm-dropzone" id="lwbm-dropzone" for="lwbm-import-file">
 			<input type="file" id="lwbm-import-file" class="lwbm-file" accept=".zip,.lwb,.lwbenc,application/zip,application/octet-stream">
-		</div>
-		<div class="lwbm-field">
-			<label for="lwbm-import-password"><?php esc_html_e( 'Mot de passe de l’installeur (archive chiffrée)', 'lwb-migration' ); ?></label>
-			<input type="password" id="lwbm-import-password" class="lwbm-input lwbm-input-wide" autocomplete="off">
-			<p class="lwbm-hint"><?php esc_html_e( 'Affiché à la fin de l’export sur le site source. Inutile pour une archive non chiffrée.', 'lwb-migration' ); ?></p>
-		</div>
-		<p class="lwbm-hint">
-			<?php
-			printf(
+			<span class="lwbm-dropzone-icon"><?php echo \LwbMigration\Admin::icon( 'upload', 40 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?></span>
+			<span class="lwbm-dropzone-title"><?php esc_html_e( 'Glissez le fichier de votre site ici', 'lwb-migration' ); ?></span>
+			<span class="lwbm-dropzone-text"><?php esc_html_e( 'ou cliquez pour le choisir · fichier exporté par Lwb Migration (.zip, .lwb ou .lwbenc)', 'lwb-migration' ); ?></span>
+			<span class="lwbm-chip">
+				<?php
 				/* translators: %s: taille d'un morceau. */
-				esc_html__( 'Envoi par morceaux de %s (limites PHP de ce serveur). Envoi interrompu ? Choisissez à nouveau le même fichier : il reprendra là où il s’était arrêté.', 'lwb-migration' ),
-				esc_html( \LwbMigration\Runtime::format_bytes( $lwbm_chunk ) )
-			);
-			?>
-		</p>
-	</section>
+				printf( esc_html__( 'Aucune limite de taille : envoi par morceaux de %s, avec reprise', 'lwb-migration' ), esc_html( \LwbMigration\Runtime::format_bytes( $lwbm_chunk ) ) );
+				?>
+			</span>
+		</label>
 
-	<section class="lwbm-card">
-		<div class="lwbm-card-head">
-			<span class="lwbm-step-badge">2</span>
-			<div>
-				<span class="lwbm-eyebrow"><?php esc_html_e( 'Envoi puis installation', 'lwb-migration' ); ?></span>
-				<h2><?php esc_html_e( 'Importer et installer', 'lwb-migration' ); ?></h2>
-			</div>
+		<div class="lwbm-picked" id="lwbm-picked" hidden>
+			<span class="lwbm-picked-icon"><?php echo \LwbMigration\Admin::icon( 'file', 28 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?></span>
+			<span class="lwbm-picked-main">
+				<strong data-lwbm-picked-name></strong>
+				<span data-lwbm-picked-size></span>
+			</span>
+			<button type="button" class="lwbm-btn lwbm-btn-ghost" id="lwbm-import-change"><?php esc_html_e( 'Changer', 'lwb-migration' ); ?></button>
 		</div>
-		<p><?php esc_html_e( 'Gardez cette page ouverte pendant l’envoi. L’installeur s’ouvre ensuite automatiquement et utilise la base de données de ce site.', 'lwb-migration' ); ?></p>
-		<button type="button" class="lwbm-btn lwbm-btn-primary lwbm-btn-lg" id="lwbm-import-start">
-			<span class="dashicons dashicons-upload" aria-hidden="true"></span>
-			<?php esc_html_e( 'Importer et installer', 'lwb-migration' ); ?>
+
+		<div class="lwbm-callout lwbm-callout-warn"><span class="dashicons dashicons-warning" aria-hidden="true"></span><p><?php esc_html_e( 'Ce site sera entièrement remplacé (fichiers et base de données). L’état actuel est mis de côté juste avant : vous pourrez revenir en arrière depuis l’installeur.', 'lwb-migration' ); ?></p></div>
+
+		<div class="lwbm-field" id="lwbm-import-password-field" hidden>
+			<label for="lwbm-import-password"><?php esc_html_e( 'Mot de passe du fichier', 'lwb-migration' ); ?></label>
+			<input type="password" id="lwbm-import-password" class="lwbm-input lwbm-input-wide" autocomplete="off" placeholder="<?php esc_attr_e( 'Affiché à la fin de l’export', 'lwb-migration' ); ?>">
+		</div>
+
+		<button type="button" class="lwbm-btn lwbm-btn-primary lwbm-btn-xl" id="lwbm-import-start" disabled>
+			<?php echo \LwbMigration\Admin::icon( 'restore', 26 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?>
+			<?php esc_html_e( 'Restaurer ce site', 'lwb-migration' ); ?>
 		</button>
+		<p class="lwbm-hint lwbm-center"><?php esc_html_e( 'Gardez cette page ouverte pendant l’envoi. L’installation démarre ensuite automatiquement.', 'lwb-migration' ); ?></p>
+
 		<?php require __DIR__ . '/progress.php'; ?>
 		<div class="lwbm-result" id="lwbm-import-result" hidden>
 			<span class="lwbm-result-icon" aria-hidden="true"><span class="dashicons dashicons-yes"></span></span>
 			<div>
-				<h3><?php esc_html_e( 'Archive importée !', 'lwb-migration' ); ?></h3>
+				<h3><?php esc_html_e( 'Fichier reçu !', 'lwb-migration' ); ?></h3>
 				<p><?php esc_html_e( 'Ouverture de l’installeur… Si rien ne se passe, cliquez sur le bouton.', 'lwb-migration' ); ?></p>
 				<a class="lwbm-btn lwbm-btn-primary" id="lwbm-import-open" href="#"><span class="dashicons dashicons-external" aria-hidden="true"></span> <?php esc_html_e( 'Ouvrir l’installeur', 'lwb-migration' ); ?></a>
 			</div>
 		</div>
 	</section>
+
+	<aside class="lwbm-side">
+		<section class="lwbm-card">
+			<h2 class="lwbm-card-title"><?php esc_html_e( 'Comment ça marche', 'lwb-migration' ); ?></h2>
+			<ol class="lwbm-steps">
+				<li><span>1</span><?php esc_html_e( 'Sur l’ancien site : Exporter → un seul fichier.', 'lwb-migration' ); ?></li>
+				<li><span>2</span><?php esc_html_e( 'Ici : WordPress et Lwb Migration installés.', 'lwb-migration' ); ?></li>
+				<li><span>3</span><?php esc_html_e( 'Déposez le fichier → Restaurer.', 'lwb-migration' ); ?></li>
+			</ol>
+		</section>
+		<section class="lwbm-card lwbm-card-soft">
+			<h2 class="lwbm-card-title"><?php esc_html_e( 'Serveur vide, sans WordPress ?', 'lwb-migration' ); ?></h2>
+			<p><?php esc_html_e( 'Sur l’ancien site, téléchargez aussi installer.php (option à la fin de l’export) et déposez les deux fichiers par FTP.', 'lwb-migration' ); ?></p>
+		</section>
+	</aside>
 </div>

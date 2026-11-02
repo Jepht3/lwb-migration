@@ -91,6 +91,12 @@
 		box.scrollIntoView( { behavior: 'smooth', block: 'nearest' } );
 	}
 
+	/* Valeur du bouton radio coché d'un groupe (choix par cartes ou pastilles). */
+	function checkedValue( name, root ) {
+		var input = ( root || document ).querySelector( 'input[name="' + name + '"]:checked' );
+		return input ? input.value : '';
+	}
+
 	function formatDuration( ms ) {
 		var s = Math.floor( ms / 1000 );
 		var m = Math.floor( s / 60 );
@@ -322,7 +328,7 @@
 			}
 			var actions = el( 'div', { className: 'lwbm-package-actions' }, [
 				restore,
-				el( 'a', { className: 'lwbm-btn lwbm-btn-soft lwbm-btn-sm', href: p.urls.archive }, [ icon( 'download' ), __( 'Archive' ) ] ),
+				el( 'a', { className: 'lwbm-btn lwbm-btn-soft lwbm-btn-sm', href: p.urls.archive }, [ icon( 'download' ), __( 'Télécharger' ) ] ),
 				el( 'a', { className: 'lwbm-btn lwbm-btn-ghost lwbm-btn-sm', href: p.urls.installer }, [ icon( 'media-code' ), 'installer.php' ] ),
 				p.urls.log ? el( 'a', { className: 'lwbm-btn lwbm-btn-ghost lwbm-btn-sm', href: p.urls.log, title: __( 'Journal' ) }, [ icon( 'media-text' ), __( 'Journal' ) ] ) : null,
 			] );
@@ -352,7 +358,7 @@
 						el( 'span', {}, [ icon( 'database' ), p.size ] ),
 						el( 'span', {}, [ icon( 'media-default' ), p.files + ' ' + __( 'fichiers' ) ] ),
 						el( 'span', {}, [ icon( 'list-view' ), p.tables + ' ' + __( 'tables' ) ] ),
-						el( 'span', { title: p.archive }, [ icon( 'tag' ), p.archive.substring( 0, 16 ) + '…' ] ),
+						el( 'span', { className: 'lwbm-package-file', title: p.filename || p.archive }, [ icon( 'media-archive' ), p.filename || p.archive ] ),
 					] ),
 				] ),
 				actions,
@@ -399,19 +405,33 @@
 		$( '#lwbm-generate-password' ).addEventListener( 'click', function () {
 			password.value = randomPassword();
 		} );
+		var customBox = $( '#lwbm-custom-password' );
+		$all( 'input[name="lwbm-protection"]' ).forEach( function ( radio ) {
+			radio.addEventListener( 'change', function () {
+				customBox.hidden = 'custom' !== checkedValue( 'lwbm-protection' );
+				if ( ! customBox.hidden ) {
+					password.focus();
+				}
+			} );
+		} );
 
 		loadPackages();
 
 		button.addEventListener( 'click', function () {
-			var pw = password.value;
-			if ( pw && pw.length < 8 ) {
+			var pw = 'custom' === checkedValue( 'lwbm-protection' ) ? password.value : '';
+			if ( 'custom' === checkedValue( 'lwbm-protection' ) && pw.length < 8 ) {
 				notice( __( 'Le mot de passe doit contenir au moins 8 caractères.' ), __( 'Allongez-le, utilisez « Générer », ou laissez le champ vide pour qu’un mot de passe soit généré.' ) );
 				return;
 			}
 			notice( '' );
 			button.disabled = true;
 			result.hidden = true;
-			post( 'export_start', { password: pw } ).then( function ( res ) {
+			var encrypt = $( '#lwbm-export-encrypt' );
+			var fields = { password: pw, content: checkedValue( 'lwbm-content' ) || 'full' };
+			if ( encrypt ) {
+				fields.encrypt = encrypt.checked ? '1' : '0';
+			}
+			post( 'export_start', fields ).then( function ( res ) {
 				if ( ! res.ok ) {
 					button.disabled = false;
 					notice( res.data.message, res.data.solution );
@@ -424,6 +444,7 @@
 						if ( pkg ) {
 							$( '[data-lwbm-dl="archive"]', result ).href = pkg.urls.archive;
 							$( '[data-lwbm-dl="installer"]', result ).href = pkg.urls.installer;
+							$( '[data-lwbm-dl-name]', result ).textContent = ( pkg.filename || pkg.archive ) + ' · ' + pkg.size;
 						}
 						// Mot de passe saisi ou généré par le serveur (champ laissé vide).
 						var finalPassword = res.data.password || pw;
@@ -520,7 +541,7 @@
 			installed.hidden = true;
 			post( 'direct_start', {
 				key: key,
-				mode: $( '#lwbm-direct-mode' ).value,
+				mode: checkedValue( 'lwbm-direct-mode' ) || 'auto',
 				via: $( '#lwbm-direct-via' ).value.trim(),
 				final_url: $( '#lwbm-direct-final' ).value.trim(),
 			} ).then( function ( res ) {
@@ -777,6 +798,54 @@
 			} );
 		}
 
+		/* Zone de dépôt : glisser-déposer ou clic, puis carte du fichier choisi. */
+		var drop = $( '#lwbm-dropzone' );
+		var picked = $( '#lwbm-picked' );
+		var pwField = $( '#lwbm-import-password-field' );
+		function showPicked() {
+			var file = fileInput.files && fileInput.files[ 0 ];
+			if ( drop && picked ) {
+				drop.hidden = !! file;
+				picked.hidden = ! file;
+			}
+			if ( file && picked ) {
+				$( '[data-lwbm-picked-name]', picked ).textContent = file.name;
+				$( '[data-lwbm-picked-size]', picked ).textContent = formatBytes( file.size );
+			}
+			if ( pwField ) {
+				pwField.hidden = ! file || ! /\.lwbenc$/i.test( file.name );
+			}
+			start.disabled = ! file;
+		}
+		fileInput.addEventListener( 'change', showPicked );
+		if ( drop ) {
+			[ 'dragenter', 'dragover' ].forEach( function ( type ) {
+				drop.addEventListener( type, function ( ev ) {
+					ev.preventDefault();
+					drop.classList.add( 'is-over' );
+				} );
+			} );
+			[ 'dragleave', 'drop' ].forEach( function ( type ) {
+				drop.addEventListener( type, function () { drop.classList.remove( 'is-over' ); } );
+			} );
+			drop.addEventListener( 'drop', function ( ev ) {
+				ev.preventDefault();
+				if ( ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length ) {
+					fileInput.files = ev.dataTransfer.files;
+					showPicked();
+				}
+			} );
+		}
+		var change = $( '#lwbm-import-change' );
+		if ( change ) {
+			change.addEventListener( 'click', function () {
+				fileInput.value = '';
+				showPicked();
+				fileInput.click();
+			} );
+		}
+		showPicked();
+
 		start.addEventListener( 'click', function () {
 			if ( ! window.confirm( __( 'Ce site sera entièrement remplacé par le contenu de l’archive. Continuer ?' ) ) ) {
 				return;
@@ -862,13 +931,20 @@
 
 		function sync() {
 			var enabled = $( '#lwbm-b-enabled' ).checked;
-			var freq = $( '#lwbm-b-frequency' ).value;
+			var freq = checkedValue( 'frequency', form );
 			$( '[data-lwbm-backup-fields]', form ).classList.toggle( 'is-off', ! enabled );
 			$all( '[data-lwbm-when]', form ).forEach( function ( row ) {
 				row.hidden = row.getAttribute( 'data-lwbm-when' ) !== freq;
 			} );
-			$( '[data-lwbm-when-notify]', form ).hidden = 'never' === $( '#lwbm-b-notify' ).value;
+			$( '[data-lwbm-when-notify]', form ).hidden = 'never' === checkedValue( 'notify', form );
 		}
+		$all( '[data-lwbm-step]', form ).forEach( function ( btn ) {
+			btn.addEventListener( 'click', function () {
+				var input = $( '#lwbm-b-keep' );
+				var v = ( parseInt( input.value, 10 ) || 1 ) + Number( btn.getAttribute( 'data-lwbm-step' ) );
+				input.value = String( Math.max( 1, Math.min( 60, v ) ) );
+			} );
+		} );
 		$all( 'input, select', form ).forEach( function ( input ) {
 			input.addEventListener( 'change', sync );
 		} );
@@ -909,7 +985,7 @@
 			ev.preventDefault();
 			var fields = {};
 			$all( 'input, select', form ).forEach( function ( input ) {
-				if ( ! input.name || ( 'checkbox' === input.type && ! input.checked ) ) {
+				if ( ! input.name || ( ( 'checkbox' === input.type || 'radio' === input.type ) && ! input.checked ) ) {
 					return;
 				}
 				fields[ 'backup[' + input.name + ']' ] = input.value;
@@ -955,7 +1031,7 @@
 			ev.preventDefault();
 			var fields = {};
 			$all( 'input, select, textarea', form ).forEach( function ( input ) {
-				if ( ! input.name || ( 'checkbox' === input.type && ! input.checked ) ) {
+				if ( ! input.name || ( ( 'checkbox' === input.type || 'radio' === input.type ) && ! input.checked ) ) {
 					return;
 				}
 				var name = input.name.replace( '[]', '' );

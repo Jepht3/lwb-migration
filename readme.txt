@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -108,6 +108,13 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.7.0 =
+* Nouveau tableau de bord : un accueil « Que voulez-vous faire ? » avec de grandes tuiles (Exporter, Migration directe, Importer, Sauvegardes, Paramètres) qui affichent leur état, la configuration du serveur et l'activité récente. Plus de barre d'onglets : chaque action s'ouvre sur son écran, avec un retour à l'accueil
+* Choix par cartes et pastilles au lieu des listes déroulantes, gros boutons d'action, affichage soigné sur téléphone
+* Un seul fichier : l'export se télécharge en un fichier au nom lisible (site, date) à importer sur le nouveau site (onglet Importer → Restaurer), comme All-in-One WP Migration. installer.php reste disponible en option pour un serveur vide sans WordPress, et retrouve l'archive même renommée
+* Import : zone de glisser-déposer, carte du fichier choisi, bouton « Restaurer ce site » ; le mot de passe n'est demandé que pour un fichier chiffré
+* Export « base de données seule » et chiffrement choisis à chaque export
 
 = 1.6.0 =
 * Nouveau : sauvegardes automatiques configurables (fréquence, jour, heure, site complet ou base de données seule, nombre de sauvegardes conservées, notification par e-mail en cas d'échec ou après chaque sauvegarde)

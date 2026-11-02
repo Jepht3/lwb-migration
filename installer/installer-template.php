@@ -695,7 +695,22 @@ class Installer {
 	 * @return string
 	 */
 	private function archive_path() {
-		return $this->root . '/' . basename( (string) $this->config['archive'] );
+		$path = $this->root . '/' . basename( (string) $this->config['archive'] );
+		if ( is_file( $path ) ) {
+			return $path;
+		}
+		// Archive renommée au téléchargement (nom lisible) : retrouvée par sa taille exacte.
+		$size = (int) ( isset( $this->config['archive_size'] ) ? $this->config['archive_size'] : 0 );
+		if ( $size > 0 ) {
+			foreach ( array( 'zip', 'lwb', 'lwbenc' ) as $ext ) {
+				foreach ( (array) glob( $this->root . '/*.' . $ext ) as $candidate ) {
+					if ( is_file( $candidate ) && filesize( $candidate ) === $size ) {
+						return $candidate;
+					}
+				}
+			}
+		}
+		return $path;
 	}
 
 	/**

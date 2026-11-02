@@ -1,6 +1,6 @@
 <?php
 /**
- * Onglet « Paramètres ».
+ * Section « Paramètres ».
  *
  * @package LwbMigration
  */
@@ -14,17 +14,27 @@ $lwbm_root   = untrailingslashit( wp_normalize_path( ABSPATH ) );
 <form id="lwbm-settings" class="lwbm-settings" novalidate>
 	<section class="lwbm-card">
 		<h2 class="lwbm-card-title"><span class="dashicons dashicons-media-archive" aria-hidden="true"></span> <?php esc_html_e( 'Archive', 'lwb-migration' ); ?></h2>
-		<div class="lwbm-row">
-			<div class="lwbm-row-text">
-				<label for="lwbm-format"><?php esc_html_e( 'Format', 'lwb-migration' ); ?></label>
-				<p class="lwbm-hint"><?php esc_html_e( 'Automatique : ZIP si l’extension zip ou zlib est disponible, sinon LWB. installer.php lit les deux sans extension particulière.', 'lwb-migration' ); ?></p>
+		<fieldset class="lwbm-choices lwbm-row-block">
+			<legend class="lwbm-step-title"><?php esc_html_e( 'Format de l’archive', 'lwb-migration' ); ?></legend>
+			<div class="lwbm-choice-grid lwbm-choice-grid-3">
+				<?php
+				$lwbm_formats = array(
+					'auto' => array( __( 'Automatique', 'lwb-migration' ), __( 'Recommandé : ZIP si le serveur le permet, sinon LWB.', 'lwb-migration' ) ),
+					'zip'  => array( __( 'ZIP standard', 'lwb-migration' ), __( 'Ouvrable par n’importe quel logiciel.', 'lwb-migration' ) ),
+					'lwb'  => array( __( 'LWB', 'lwb-migration' ), __( 'PHP pur, sans compression : pour les serveurs les plus limités.', 'lwb-migration' ) ),
+				);
+				foreach ( $lwbm_formats as $lwbm_v => $lwbm_f ) :
+					?>
+					<label class="lwbm-choice lwbm-choice-sm">
+						<input type="radio" name="format" value="<?php echo esc_attr( $lwbm_v ); ?>" <?php checked( $lwbm_s['format'], $lwbm_v ); ?>>
+						<span class="lwbm-choice-body">
+							<span class="lwbm-choice-title"><?php echo esc_html( $lwbm_f[0] ); ?></span>
+							<span class="lwbm-choice-text"><?php echo esc_html( $lwbm_f[1] ); ?></span>
+						</span>
+					</label>
+				<?php endforeach; ?>
 			</div>
-			<select id="lwbm-format" name="format" class="lwbm-select">
-				<option value="auto" <?php selected( $lwbm_s['format'], 'auto' ); ?>><?php esc_html_e( 'Automatique (recommandé)', 'lwb-migration' ); ?></option>
-				<option value="zip" <?php selected( $lwbm_s['format'], 'zip' ); ?>><?php esc_html_e( 'ZIP standard', 'lwb-migration' ); ?></option>
-				<option value="lwb" <?php selected( $lwbm_s['format'], 'lwb' ); ?>><?php esc_html_e( 'LWB (PHP pur, sans compression)', 'lwb-migration' ); ?></option>
-			</select>
-		</div>
+		</fieldset>
 		<div class="lwbm-row">
 			<div class="lwbm-row-text">
 				<label for="lwbm-compress"><?php esc_html_e( 'Compression', 'lwb-migration' ); ?></label>

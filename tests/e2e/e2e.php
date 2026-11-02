@@ -598,20 +598,23 @@ mkdir( $dst_root );
 // CSS Elementor de l'ancien site de destination, au même nom qu'un fichier du site source.
 mkdir( "$dst_root/wp-content/uploads/elementor/css", 0755, true );
 file_put_contents( "$dst_root/wp-content/uploads/elementor/css/post-1.css", '.ancien-site{}' );
-ok( 200 === $admin->download( $pkg['urls']['archive'], "$dst_root/{$pkg['archive']}" ), 'archive téléchargée' );
+// Un seul fichier, au nom lisible (site, date, partie aléatoire) : installer.php doit le
+// retrouver bien qu'il ne porte plus le nom archive-<aléatoire> d'origine.
+ok( preg_match( '/^127-0-0-1-' . gmdate( 'Y-m-d' ) . '-[a-f0-9]{16}\.(zip|lwb|lwbenc)$/', $pkg['filename'] ), 'fichier du site au nom lisible : ' . $pkg['filename'] );
+ok( 200 === $admin->download( $pkg['urls']['archive'], "$dst_root/{$pkg['filename']}" ), 'archive téléchargée' );
 ok( 200 === $admin->download( $pkg['urls']['installer'], "$dst_root/installer.php" ), 'installer.php téléchargé' );
 ok( 200 === $admin->download( $pkg['urls']['log'], E2E_WORK . '/export-log.txt' ) && false !== strpos( file_get_contents( E2E_WORK . '/export-log.txt' ), 'Paquet prêt' ), 'journal d’export téléchargeable' );
 $anon_dl = ( new Client( 'x' ) )->request( $pkg['urls']['archive'] );
 ok( in_array( $anon_dl['code'], array( 400, 403 ), true ) && strlen( $anon_dl['body'] ) < 1000, 'téléchargement refusé sans session (HTTP ' . $anon_dl['code'] . ')' );
 
 // Archive chiffrée : illisible sans le mot de passe, ZIP standard une fois déchiffrée.
-$enc_raw = file_get_contents( "$dst_root/{$pkg['archive']}" );
+$enc_raw = file_get_contents( "$dst_root/{$pkg['filename']}" );
 ok( 0 === strpos( $enc_raw, \LwbMigration\Archive_Crypto::MAGIC ) && false === strpos( $enc_raw, 'database.sql' ) && false === strpos( $enc_raw, 'DB_PASSWORD' ), 'archive chiffrée : aucun nom de fichier ni contenu lisible' );
 unset( $enc_raw );
-$head  = \LwbMigration\Archive_Crypto::read_header( "$dst_root/{$pkg['archive']}" );
+$head  = \LwbMigration\Archive_Crypto::read_header( "$dst_root/{$pkg['filename']}" );
 $plain = E2E_WORK . '/export-dechiffre.zip';
 $dec   = array();
-\LwbMigration\Archive_Crypto::decrypt_step( "$dst_root/{$pkg['archive']}", $plain, \LwbMigration\Archive_Crypto::derive_key( E2E_PKG_PASSWORD, $head['salt'], $head['iterations'] ), $dec );
+\LwbMigration\Archive_Crypto::decrypt_step( "$dst_root/{$pkg['filename']}", $plain, \LwbMigration\Archive_Crypto::derive_key( E2E_PKG_PASSWORD, $head['salt'], $head['iterations'] ), $dec );
 $zip = new ZipArchive();
 ok( true === $zip->open( $plain, ZipArchive::CHECKCONS ), 'archive déchiffrée : ZIP standard valide (ZipArchive::CHECKCONS)' );
 $names = array();
@@ -635,7 +638,7 @@ step( 'Scénario 1 – Installation sur http://localhost:8102 (autre dossier, ba
 mysql_root()->query( 'DROP DATABASE IF EXISTS lwb_e2e_dst' );
 start_server( 8102, $dst_root, 4, 'dst' );
 $dst_url = 'http://localhost:8102';
-layout_audit( array( 'admin', $src_url, 'admin', E2E_PASS ), 'administration (Exporter, Migration directe, Sauvegardes, Paramètres)' );
+layout_audit( array( 'admin', $src_url, 'admin', E2E_PASS ), 'tableau de bord (accueil, Exporter, Migration directe, Importer, Sauvegardes, Paramètres)' );
 layout_audit( array( 'installer', "$dst_url/installer.php", E2E_PKG_PASSWORD ), 'installeur (connexion et étapes, clair et sombre)' );
 $inst    = new Client( 'dst' );
 list( $api, $final ) = drive_installer(
@@ -654,7 +657,7 @@ list( $api, $final ) = drive_installer(
 	E2E_PKG_PASSWORD
 );
 ok( 0 === $final['result']['errors'], 'aucune erreur SQL pendant l’import' );
-ok( ! is_file( "$dst_root/{$pkg['archive']}" ), 'archive supprimée automatiquement après l’installation' );
+ok( ! is_file( "$dst_root/{$pkg['filename']}" ), 'archive supprimée automatiquement après l’installation' );
 
 function verify_site( $label, $url, $root, $dbname, $prefix, $old_url, $old_path ) {
 	$m = db( $dbname );

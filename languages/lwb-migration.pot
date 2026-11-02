@@ -3,88 +3,100 @@
 # Langue source : français.
 msgid ""
 msgstr ""
-"Project-Id-Version: Lwb Migration 1.6.0\n"
+"Project-Id-Version: Lwb Migration 1.7.0\n"
 "Report-Msgid-Bugs-To: https://github.com/Jepht3/lwb-migration/issues\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-02 10:08+0000\n"
+"POT-Creation-Date: 2026-11-02 10:36+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "X-Domain: lwb-migration\n"
 
-#: admin/views/tab-import.php:16
-msgid "Importer une archive, sans FTP"
+#: admin/views/tab-import.php:19
+msgid "Glissez le fichier de votre site ici"
 msgstr ""
 
-#: admin/views/tab-import.php:17
-msgid "Envoyez ici l’archive créée par l’onglet « Exporter » du site source : elle est transmise par petits morceaux, compatibles avec les limites de ce serveur, puis l’installation démarre comme en migration directe."
-msgstr ""
-
-#: admin/views/tab-import.php:26
-msgid "Sur ce site (destination)"
-msgstr ""
-
-#: admin/views/tab-import.php:27
-msgid "Choisir l’archive"
-msgstr ""
-
-#: admin/views/tab-import.php:30
-msgid "Tout le contenu de ce site (fichiers et base de données) sera remplacé par celui de l’archive. L’ancien site est mis de côté et peut être restauré depuis l’installeur."
-msgstr ""
-
-#: admin/views/tab-import.php:32
-msgid "Archive (archive-….zip, .lwb ou .lwbenc)"
-msgstr ""
-
-#: admin/views/tab-import.php:36
-msgid "Mot de passe de l’installeur (archive chiffrée)"
-msgstr ""
-
-#: admin/views/tab-import.php:38
-msgid "Affiché à la fin de l’export sur le site source. Inutile pour une archive non chiffrée."
+#: admin/views/tab-import.php:20
+msgid "ou cliquez pour le choisir · fichier exporté par Lwb Migration (.zip, .lwb ou .lwbenc)"
 msgstr ""
 
 #. translators: %s: taille d'un morceau.
-#: admin/views/tab-import.php:44
+#: admin/views/tab-import.php:24
 #, php-format
-msgid "Envoi par morceaux de %s (limites PHP de ce serveur). Envoi interrompu ? Choisissez à nouveau le même fichier : il reprendra là où il s’était arrêté."
+msgid "Aucune limite de taille : envoi par morceaux de %s, avec reprise"
+msgstr ""
+
+#: admin/views/tab-import.php:35
+msgid "Changer"
+msgstr ""
+
+#: admin/views/tab-import.php:38
+msgid "Ce site sera entièrement remplacé (fichiers et base de données). L’état actuel est mis de côté juste avant : vous pourrez revenir en arrière depuis l’installeur."
+msgstr ""
+
+#: admin/views/tab-import.php:41
+msgid "Mot de passe du fichier"
+msgstr ""
+
+#: admin/views/tab-import.php:42
+msgid "Affiché à la fin de l’export"
+msgstr ""
+
+#: admin/views/tab-import.php:47
+msgid "Restaurer ce site"
+msgstr ""
+
+#: admin/views/tab-import.php:49
+msgid "Gardez cette page ouverte pendant l’envoi. L’installation démarre ensuite automatiquement."
 msgstr ""
 
 #: admin/views/tab-import.php:55
-msgid "Envoi puis installation"
+msgid "Fichier reçu !"
 msgstr ""
 
-#: admin/views/tab-import.php:56 admin/views/tab-import.php:62
-msgid "Importer et installer"
-msgstr ""
-
-#: admin/views/tab-import.php:59
-msgid "Gardez cette page ouverte pendant l’envoi. L’installeur s’ouvre ensuite automatiquement et utilise la base de données de ce site."
-msgstr ""
-
-#: admin/views/tab-import.php:68
-msgid "Archive importée !"
-msgstr ""
-
-#: admin/views/tab-import.php:69
+#: admin/views/tab-import.php:56
 msgid "Ouverture de l’installeur… Si rien ne se passe, cliquez sur le bouton."
 msgstr ""
 
-#: admin/views/tab-import.php:70
+#: admin/views/tab-import.php:57
 msgid "Ouvrir l’installeur"
 msgstr ""
 
-#: admin/views/progress.php:14 admin/views/tab-settings.php:52
+#: admin/views/tab-import.php:64
+msgid "Comment ça marche"
+msgstr ""
+
+#: admin/views/tab-import.php:66
+msgid "Sur l’ancien site : Exporter → un seul fichier."
+msgstr ""
+
+#: admin/views/tab-import.php:67
+msgid "Ici : WordPress et Lwb Migration installés."
+msgstr ""
+
+#: admin/views/tab-import.php:68
+msgid "Déposez le fichier → Restaurer."
+msgstr ""
+
+#: admin/views/tab-import.php:72 admin/views/tab-export.php:103
+msgid "Serveur vide, sans WordPress ?"
+msgstr ""
+
+#: admin/views/tab-import.php:73
+msgid "Sur l’ancien site, téléchargez aussi installer.php (option à la fin de l’export) et déposez les deux fichiers par FTP."
+msgstr ""
+
+#: admin/views/progress.php:14 admin/views/tab-settings.php:62
 msgid "Fichiers"
 msgstr ""
 
-#: admin/views/progress.php:15 admin/views/tab-settings.php:89 includes/class-admin.php:152
+#: admin/views/progress.php:15 admin/views/tab-settings.php:99 includes/class-admin.php:319
 msgid "Base de données"
 msgstr ""
 
-#: admin/views/progress.php:16 admin/views/tab-settings.php:16 admin/js/admin.js:325
+#: admin/views/progress.php:16 admin/views/tab-settings.php:16
 msgid "Archive"
 msgstr ""
 
@@ -128,361 +140,439 @@ msgstr ""
 msgid "Journal en direct"
 msgstr ""
 
-#: admin/views/tab-settings.php:19
-msgid "Format"
+#: admin/views/tab-home.php:15
+msgid "Actions"
 msgstr ""
 
-#: admin/views/tab-settings.php:20
-msgid "Automatique : ZIP si l’extension zip ou zlib est disponible, sinon LWB. installer.php lit les deux sans extension particulière."
+#: admin/views/tab-home.php:37
+msgid "Votre serveur"
 msgstr ""
 
-#: admin/views/tab-settings.php:23 admin/views/tab-direct.php:74
-msgid "Automatique (recommandé)"
+#. translators: %s: durée d'une étape.
+#: admin/views/tab-home.php:51
+#, php-format
+msgid "Étapes de %s"
 msgstr ""
 
-#: admin/views/tab-settings.php:24 includes/class-admin.php:158
+#. translators: %s: mémoire PHP.
+#: admin/views/tab-home.php:54
+#, php-format
+msgid "Mémoire %s"
+msgstr ""
+
+#: admin/views/tab-home.php:61
+msgid "Traitement par petites étapes avec reprise automatique : aucune configuration nécessaire, même sur un petit hébergement."
+msgstr ""
+
+#: admin/views/tab-home.php:66
+msgid "Activité récente"
+msgstr ""
+
+#: admin/views/tab-home.php:68
+msgid "Rien pour le moment. Exportez le site ou activez les sauvegardes automatiques pour commencer."
+msgstr ""
+
+#: admin/views/tab-settings.php:18
+msgid "Format de l’archive"
+msgstr ""
+
+#: admin/views/tab-settings.php:22
+msgid "Automatique"
+msgstr ""
+
+#: admin/views/tab-settings.php:22
+msgid "Recommandé : ZIP si le serveur le permet, sinon LWB."
+msgstr ""
+
+#: admin/views/tab-settings.php:23 includes/class-admin.php:325
 msgid "ZIP standard"
 msgstr ""
 
-#: admin/views/tab-settings.php:25
-msgid "LWB (PHP pur, sans compression)"
+#: admin/views/tab-settings.php:23
+msgid "Ouvrable par n’importe quel logiciel."
 msgstr ""
 
-#: admin/views/tab-settings.php:30
+#: admin/views/tab-settings.php:24
+msgid "LWB"
+msgstr ""
+
+#: admin/views/tab-settings.php:24
+msgid "PHP pur, sans compression : pour les serveurs les plus limités."
+msgstr ""
+
+#: admin/views/tab-settings.php:40
 msgid "Compression"
 msgstr ""
 
-#: admin/views/tab-settings.php:31
+#: admin/views/tab-settings.php:41
 msgid "Compresse les fichiers texte. Images, vidéos et archives sont stockées telles quelles."
 msgstr ""
 
-#: admin/views/tab-settings.php:37
+#: admin/views/tab-settings.php:47
 msgid "Chiffrer l’archive"
 msgstr ""
 
-#: admin/views/tab-settings.php:38
+#: admin/views/tab-settings.php:48
 msgid "AES-256 avec le mot de passe de l’installeur : l’archive (fichiers, wp-config.php, base de données) est illisible sans lui, sur le serveur comme pendant le transfert FTP. La migration directe passe déjà par HTTPS."
 msgstr ""
 
-#: admin/views/tab-settings.php:44
+#: admin/views/tab-settings.php:54
 msgid "Paquets conservés"
 msgstr ""
 
-#: admin/views/tab-settings.php:45
+#: admin/views/tab-settings.php:55
 msgid "Les plus anciens sont supprimés automatiquement."
 msgstr ""
 
-#: admin/views/tab-settings.php:55
+#: admin/views/tab-settings.php:65
 msgid "Exclusions intelligentes"
 msgstr ""
 
-#: admin/views/tab-settings.php:56
+#: admin/views/tab-settings.php:66
 msgid "Caches, sauvegardes d’autres extensions, node_modules, .git et journaux d’erreurs. Lwb Migration et ses paquets sont toujours exclus."
 msgstr ""
 
-#: admin/views/tab-settings.php:62
+#: admin/views/tab-settings.php:72
 msgid "Dossiers exclus"
 msgstr ""
 
 #. translators: %s: chemin de la racine du site.
-#: admin/views/tab-settings.php:66
+#: admin/views/tab-settings.php:76
 #, php-format
 msgid "Un chemin par ligne, relatif à la racine du site (%s)."
 msgstr ""
 
-#: admin/views/tab-settings.php:74
+#: admin/views/tab-settings.php:84
 msgid "Extensions exclues"
 msgstr ""
 
-#: admin/views/tab-settings.php:75
+#: admin/views/tab-settings.php:85
 msgid "Séparées par des virgules."
 msgstr ""
 
-#: admin/views/tab-settings.php:81
+#: admin/views/tab-settings.php:91
 msgid "Taille maximale d’un fichier"
 msgstr ""
 
-#: admin/views/tab-settings.php:82
+#: admin/views/tab-settings.php:92
 msgid "En Mo. 0 = aucune limite."
 msgstr ""
 
-#: admin/views/tab-settings.php:92
+#: admin/views/tab-settings.php:102
 msgid "Toutes les tables"
 msgstr ""
 
-#: admin/views/tab-settings.php:93
+#: admin/views/tab-settings.php:103
 msgid "Inclure aussi les tables sans le préfixe WordPress."
 msgstr ""
 
-#: admin/views/tab-settings.php:99
+#: admin/views/tab-settings.php:109
 msgid "Tables exclues"
 msgstr ""
 
-#: admin/views/tab-settings.php:100
+#: admin/views/tab-settings.php:110
 msgid "Cochez les tables à ne pas migrer (journaux, statistiques volumineuses…)."
 msgstr ""
 
-#: admin/views/tab-settings.php:115
+#: admin/views/tab-settings.php:125
 msgid "Les réglages s’appliquent aux prochains exports."
 msgstr ""
 
-#: admin/views/tab-settings.php:116
+#: admin/views/tab-settings.php:126
 msgid "Enregistrer les réglages"
 msgstr ""
 
-#: admin/views/tab-direct.php:17
-msgid "Migration directe, de serveur à serveur"
-msgstr ""
-
-#: admin/views/tab-direct.php:18
-msgid "Rien à télécharger sur votre ordinateur : le site est envoyé en HTTPS, par morceaux signés. Lwb Migration doit être installée sur les deux sites."
-msgstr ""
-
-#: admin/views/tab-direct.php:27
+#: admin/views/tab-direct.php:20
 msgid "Sur le site de destination"
 msgstr ""
 
-#: admin/views/tab-direct.php:28
+#: admin/views/tab-direct.php:21
 msgid "Générer une clé"
 msgstr ""
 
-#: admin/views/tab-direct.php:31
+#: admin/views/tab-direct.php:24
 msgid "La clé est valable 24 heures et ne sert qu’une seule fois."
 msgstr ""
 
-#: admin/views/tab-direct.php:33
+#: admin/views/tab-direct.php:26
 msgid "Ce site n’utilise pas HTTPS : la clé sera refusée par le site source. Activez un certificat SSL pour utiliser la migration directe."
 msgstr ""
 
-#: admin/views/tab-direct.php:35
+#: admin/views/tab-direct.php:28
 msgid "Tout le contenu de ce site (fichiers et base de données) sera remplacé par celui du site source."
 msgstr ""
 
-#: admin/views/tab-direct.php:37
+#: admin/views/tab-direct.php:30
 msgid "Générer une clé de migration"
 msgstr ""
 
-#: admin/views/tab-direct.php:38
+#: admin/views/tab-direct.php:31
 msgid "Révoquer la clé"
 msgstr ""
 
-#: admin/views/tab-direct.php:41 admin/views/tab-direct.php:67
+#: admin/views/tab-direct.php:34 admin/views/tab-direct.php:60
 msgid "Clé de migration"
 msgstr ""
 
-#: admin/views/tab-direct.php:45
+#: admin/views/tab-direct.php:38
 msgid "Copier la clé"
 msgstr ""
 
-#: admin/views/tab-direct.php:50
+#: admin/views/tab-direct.php:43
 msgid "Clé active"
 msgstr ""
 
 #. translators: %s: date d'expiration.
-#: admin/views/tab-direct.php:53
+#: admin/views/tab-direct.php:46
 #, php-format
 msgid "jusqu’au %s"
 msgstr ""
 
-#: admin/views/tab-direct.php:63
+#: admin/views/tab-direct.php:56
 msgid "Sur le site source (celui-ci)"
 msgstr ""
 
-#: admin/views/tab-direct.php:64
+#: admin/views/tab-direct.php:57
 msgid "Coller la clé et lancer"
 msgstr ""
 
-#: admin/views/tab-direct.php:70
+#: admin/views/tab-direct.php:63
 msgid "Options avancées : pare-feu, migration avant le changement de DNS"
 msgstr ""
 
-#: admin/views/tab-direct.php:72
+#: admin/views/tab-direct.php:65
 msgid "Mode de transfert"
 msgstr ""
 
-#: admin/views/tab-direct.php:75
+#: admin/views/tab-direct.php:67
+msgid "Automatique (recommandé)"
+msgstr ""
+
+#: admin/views/tab-direct.php:68
 msgid "Envoi par ce site"
 msgstr ""
 
-#: admin/views/tab-direct.php:76
+#: admin/views/tab-direct.php:69
 msgid "Téléchargement par la destination"
 msgstr ""
 
-#: admin/views/tab-direct.php:78
+#: admin/views/tab-direct.php:71
 msgid "Si le pare-feu de l’hébergeur de destination bloque les envois, la destination télécharge elle-même l’archive grâce à un lien signé, temporaire et reprenable. En automatique, la bascule se fait toute seule."
 msgstr ""
 
-#: admin/views/tab-direct.php:81
+#: admin/views/tab-direct.php:74
 msgid "Adresse du nouveau serveur (avant le changement de DNS)"
 msgstr ""
 
-#: admin/views/tab-direct.php:83
+#: admin/views/tab-direct.php:76
 msgid "Le domaine pointe encore vers l’ancien serveur ? Indiquez l’adresse IP du nouveau serveur (connexion vérifiée sur le vrai nom de domaine) ou son URL temporaire. Ce site installera alors lui-même le site sur le nouveau serveur : il ne restera qu’à changer les DNS."
 msgstr ""
 
-#: admin/views/tab-direct.php:86
+#: admin/views/tab-direct.php:79
 msgid "Adresse définitive du site (facultatif)"
 msgstr ""
 
-#: admin/views/tab-direct.php:88
+#: admin/views/tab-direct.php:81
 msgid "À renseigner si le WordPress de destination a été installé avec une adresse provisoire : le site sera installé avec cette adresse. Laissez vide pour garder celle de la destination."
 msgstr ""
 
-#: admin/views/tab-direct.php:93
+#: admin/views/tab-direct.php:86
 msgid "Lancer la migration directe"
 msgstr ""
 
-#: admin/views/tab-direct.php:99
+#: admin/views/tab-direct.php:92
 msgid "Transfert terminé !"
 msgstr ""
 
-#: admin/views/tab-direct.php:100
+#: admin/views/tab-direct.php:93
 msgid "Dernière étape : ouvrez l’installeur sur le site de destination. Il se déroule automatiquement."
 msgstr ""
 
-#: admin/views/tab-direct.php:101
+#: admin/views/tab-direct.php:94
 msgid "Ouvrir l’installeur sur la destination"
 msgstr ""
 
-#: admin/views/tab-direct.php:107
+#: admin/views/tab-direct.php:100
 msgid "Site installé sur le nouveau serveur !"
 msgstr ""
 
-#: admin/views/tab-direct.php:109
+#: admin/views/tab-direct.php:102
 msgid "Dernière étape : faites pointer le domaine vers le nouveau serveur (DNS). Le site répondra à l’adresse"
 msgstr ""
 
-#: admin/views/tab-direct.php:113
+#: admin/views/tab-direct.php:106
 msgid "Pour le vérifier dès maintenant, ajoutez cette ligne au fichier hosts de votre ordinateur :"
 msgstr ""
 
-#: admin/views/page.php:28 includes/class-admin.php:43 includes/class-admin.php:44
+#: admin/views/page.php:22
+msgid "Accueil"
+msgstr ""
+
+#: admin/views/page.php:27 includes/class-admin.php:43 includes/class-admin.php:44
 msgid "Lwb Migration"
 msgstr ""
 
-#: admin/views/page.php:29
-msgid "Déplacez votre site WordPress vers n’importe quel serveur, en toute sécurité."
+#: admin/views/page.php:28
+msgid "Migrations et sauvegardes WordPress"
 msgstr ""
 
 #. translators: %s: numéro de version.
-#: admin/views/page.php:37
+#: admin/views/page.php:36
 #, php-format
 msgid "Version %s disponible"
 msgstr ""
 
-#: admin/views/page.php:41 admin/js/admin.js:988
+#: admin/views/page.php:40 admin/js/admin.js:1064
 msgid "Mettre à jour"
 msgstr ""
 
-#: admin/views/page.php:45 admin/js/admin.js:992
+#: admin/views/page.php:44 admin/js/admin.js:1068
 msgid "À jour"
 msgstr ""
 
-#: admin/views/page.php:45 admin/js/admin.js:992
+#: admin/views/page.php:44 admin/js/admin.js:1068
 msgid "Mises à jour automatiques"
 msgstr ""
 
-#: admin/views/page.php:47 admin/js/admin.js:993 admin/js/admin.js:1008 admin/js/admin.js:1013
+#: admin/views/page.php:46 admin/js/admin.js:1069 admin/js/admin.js:1084 admin/js/admin.js:1089
 msgid "Vérifier"
 msgstr ""
 
-#: admin/views/page.php:50
-msgid "Sections"
+#: admin/views/page.php:59
+msgid "Que voulez-vous faire ?"
 msgstr ""
 
-#: admin/views/tab-export.php:18
-msgid "Créer un paquet de migration"
+#: admin/views/page.php:60
+msgid "Choisissez une action. Tout se fait par petites étapes, sans rien configurer."
 msgstr ""
 
-#: admin/views/tab-export.php:19
-msgid "Une archive (fichiers + base de données) et un installer.php autonome, prêts à déposer sur le nouveau serveur."
+#: admin/views/tab-export.php:23
+msgid "1 · Que voulez-vous exporter ?"
 msgstr ""
 
-#: admin/views/tab-export.php:24 includes/class-admin.php:60 includes/class-admin.php:122
-msgid "Exporter"
+#: admin/views/tab-export.php:28 admin/views/tab-backups.php:97 includes/class-admin.php:276
+msgid "Site complet"
 msgstr ""
 
-#: admin/views/tab-export.php:24
-msgid "en un clic, ici"
+#: admin/views/tab-export.php:29
+msgid "Fichiers, extensions, thèmes, médias et base de données."
 msgstr ""
 
-#: admin/views/tab-export.php:25
-msgid "Envoyer"
-msgstr ""
-
-#: admin/views/tab-export.php:25
-msgid "2 fichiers à la racine du serveur"
-msgstr ""
-
-#: admin/views/tab-export.php:26
-msgid "Installer"
-msgstr ""
-
-#: admin/views/tab-export.php:26
-msgid "via votre-domaine/installer.php"
-msgstr ""
-
-#: admin/views/tab-export.php:30
-msgid "Mot de passe de l’installeur"
-msgstr ""
-
-#: admin/views/tab-export.php:30
-msgid "obligatoire"
-msgstr ""
-
-#: admin/views/tab-export.php:33
-msgid "Laissez vide pour en générer un automatiquement"
-msgstr ""
-
-#: admin/views/tab-export.php:34
-msgid "Générer"
+#: admin/views/tab-export.php:35 admin/views/tab-backups.php:104 includes/class-admin.php:276
+msgid "Base de données seule"
 msgstr ""
 
 #: admin/views/tab-export.php:36
-msgid "Demandé à l’ouverture d’installer.php : personne d’autre ne pourra lancer l’installation. Laissé vide, un mot de passe est généré et affiché à la fin de l’export : notez-le bien."
+msgid "Articles, pages, réglages et comptes. Rapide et léger."
 msgstr ""
 
+#. translators: %s: taille de la base.
 #: admin/views/tab-export.php:41
+#, php-format
+msgid "≈ %s"
+msgstr ""
+
+#: admin/views/tab-export.php:51
+msgid "2 · Protection"
+msgstr ""
+
+#: admin/views/tab-export.php:56
+msgid "Mot de passe généré"
+msgstr ""
+
+#: admin/views/tab-export.php:57
+msgid "Recommandé. Il s’affiche à la fin de l’export : notez-le."
+msgstr ""
+
+#: admin/views/tab-export.php:63
+msgid "Choisir mon mot de passe"
+msgstr ""
+
+#: admin/views/tab-export.php:64
+msgid "Pour un mot de passe que vous connaissez déjà."
+msgstr ""
+
+#: admin/views/tab-export.php:69
+msgid "Votre mot de passe (8 caractères minimum)"
+msgstr ""
+
+#: admin/views/tab-export.php:72
+msgid "Choisissez un mot de passe"
+msgstr ""
+
+#: admin/views/tab-export.php:73
+msgid "Générer"
+msgstr ""
+
+#: admin/views/tab-export.php:79
+msgid "Chiffrer le fichier"
+msgstr ""
+
+#: admin/views/tab-export.php:80
+msgid "Illisible sans le mot de passe, sur le serveur comme pendant le transfert."
+msgstr ""
+
+#: admin/views/tab-export.php:89 includes/class-admin.php:139
 msgid "Exporter le site"
 msgstr ""
 
-#: admin/views/tab-export.php:49
-msgid "Paquet prêt !"
+#: admin/views/tab-export.php:97
+msgid "Votre site est prêt !"
 msgstr ""
 
-#: admin/views/tab-export.php:50
-msgid "Téléchargez les deux fichiers et envoyez-les à la racine du site de destination (FTP ou gestionnaire de fichiers)."
+#: admin/views/tab-export.php:98
+msgid "Téléchargez ce fichier, puis sur le nouveau site : Lwb Migration › Importer › Restaurer."
 msgstr ""
 
-#: admin/views/tab-export.php:52
-msgid "Télécharger l’archive"
+#: admin/views/tab-export.php:99
+msgid "Télécharger le fichier du site"
 msgstr ""
 
-#: admin/views/tab-export.php:53
+#: admin/views/tab-export.php:101
+msgid "Mot de passe :"
+msgstr ""
+
+#: admin/views/tab-export.php:104
+msgid "Téléchargez aussi installer.php, déposez les deux fichiers à la racine du serveur (FTP), puis ouvrez votre-domaine/installer.php."
+msgstr ""
+
+#: admin/views/tab-export.php:105
 msgid "Télécharger installer.php"
 msgstr ""
 
-#: admin/views/tab-export.php:55
-msgid "Mot de passe de l’installeur :"
+#: admin/views/tab-export.php:113
+msgid "Ensuite"
 msgstr ""
 
-#: admin/views/tab-export.php:62
-msgid "Votre serveur"
+#: admin/views/tab-export.php:115
+msgid "Téléchargez le fichier du site."
 msgstr ""
 
-#: admin/views/tab-export.php:74
-msgid "Conçu pour tous les hébergeurs"
+#: admin/views/tab-export.php:116
+msgid "Sur le nouveau site : installez WordPress et Lwb Migration."
 msgstr ""
 
-#: admin/views/tab-export.php:75
-msgid "Traitement par petites étapes et reprise automatique : aucune configuration, même avec 30 s d’exécution et 128 Mo de mémoire."
+#: admin/views/tab-export.php:117
+msgid "Importer → déposez le fichier → Restaurer."
 msgstr ""
 
-#: admin/views/tab-export.php:82
-msgid "Paquets disponibles"
+#: admin/views/tab-export.php:121
+msgid "Sans rien télécharger ?"
 msgstr ""
 
-#: admin/views/tab-export.php:85 admin/views/tab-backups.php:140 admin/views/tab-backups.php:156 admin/views/tab-backups.php:163
+#: admin/views/tab-export.php:122
+msgid "La migration directe envoie le site de serveur à serveur."
+msgstr ""
+
+#: admin/views/tab-export.php:123
+msgid "Choisir la migration directe"
+msgstr ""
+
+#: admin/views/tab-export.php:129
+msgid "Exports disponibles"
+msgstr ""
+
+#: admin/views/tab-export.php:131 admin/views/tab-backups.php:149 admin/views/tab-backups.php:163 admin/views/tab-backups.php:170
 msgid "Chargement…"
 msgstr ""
 
@@ -514,141 +604,145 @@ msgstr ""
 msgid "dimanche"
 msgstr ""
 
-#: admin/views/tab-backups.php:28 admin/js/admin.js:816
+#: admin/views/tab-backups.php:22
+msgid "2× par jour"
+msgstr ""
+
+#: admin/views/tab-backups.php:22
+msgid "Sites très actifs"
+msgstr ""
+
+#: admin/views/tab-backups.php:23
+msgid "Chaque jour"
+msgstr ""
+
+#: admin/views/tab-backups.php:23
+msgid "Recommandé"
+msgstr ""
+
+#: admin/views/tab-backups.php:24
+msgid "Chaque semaine"
+msgstr ""
+
+#: admin/views/tab-backups.php:24
+msgid "Sites peu modifiés"
+msgstr ""
+
+#: admin/views/tab-backups.php:25
+msgid "Chaque mois"
+msgstr ""
+
+#: admin/views/tab-backups.php:25
+msgid "Sites vitrines"
+msgstr ""
+
+#: admin/views/tab-backups.php:35 admin/js/admin.js:885
 msgid "Sauvegardes automatiques"
 msgstr ""
 
-#: admin/views/tab-backups.php:29
-msgid "Votre site est sauvegardé tout seul, au rythme choisi. Chaque sauvegarde se restaure en un clic, ou s’installe sur un autre serveur avec son installer.php."
-msgstr ""
-
 #: admin/views/tab-backups.php:36
-msgid "Activer les sauvegardes automatiques"
+msgid "En arrière-plan, par petites étapes, sans ralentir le site."
 msgstr ""
 
-#: admin/views/tab-backups.php:37
-msgid "Elles s’exécutent en arrière-plan, par petites étapes, sans ralentir le site."
-msgstr ""
-
-#: admin/views/tab-backups.php:45
+#: admin/views/tab-backups.php:43
 msgid "Fréquence"
 msgstr ""
 
-#: admin/views/tab-backups.php:48
-msgid "Deux fois par jour"
+#: admin/views/tab-backups.php:58
+msgid "Jour"
 msgstr ""
 
-#: admin/views/tab-backups.php:49
-msgid "Tous les jours"
-msgstr ""
-
-#: admin/views/tab-backups.php:50
-msgid "Toutes les semaines"
-msgstr ""
-
-#: admin/views/tab-backups.php:51
-msgid "Tous les mois"
-msgstr ""
-
-#: admin/views/tab-backups.php:56
-msgid "Jour de la semaine"
-msgstr ""
-
-#: admin/views/tab-backups.php:66
+#: admin/views/tab-backups.php:68
 msgid "Jour du mois"
 msgstr ""
 
-#: admin/views/tab-backups.php:67
-msgid "De 1 à 28, pour exister tous les mois."
-msgstr ""
-
-#: admin/views/tab-backups.php:77
+#: admin/views/tab-backups.php:76
 msgid "Heure"
 msgstr ""
 
 #. translators: %s: fuseau horaire du site.
-#: admin/views/tab-backups.php:81
+#: admin/views/tab-backups.php:85
 #, php-format
-msgid "Fuseau horaire du site : %s. Choisissez une heure creuse."
+msgid "Fuseau du site : %s. Choisissez une heure creuse."
 msgstr ""
 
-#: admin/views/tab-backups.php:93
+#: admin/views/tab-backups.php:92
 msgid "Contenu"
 msgstr ""
 
-#: admin/views/tab-backups.php:94
-msgid "La base de données seule est plus rapide et plus légère : idéale pour des sauvegardes fréquentes d’un site dont les fichiers changent peu."
-msgstr ""
-
-#: admin/views/tab-backups.php:97
-msgid "Site complet (fichiers + base de données)"
-msgstr ""
-
 #: admin/views/tab-backups.php:98
-msgid "Base de données uniquement"
+msgid "Fichiers et base de données."
 msgstr ""
 
-#: admin/views/tab-backups.php:103
-msgid "Sauvegardes conservées"
-msgstr ""
-
-#: admin/views/tab-backups.php:104
-msgid "Au-delà, les plus anciennes sont supprimées automatiquement. Les paquets de migration ont leur propre limite."
-msgstr ""
-
-#: admin/views/tab-backups.php:110
-msgid "Notification par e-mail"
+#: admin/views/tab-backups.php:105
+msgid "Plus rapide et plus léger, idéal pour des sauvegardes fréquentes."
 msgstr ""
 
 #: admin/views/tab-backups.php:113
-msgid "Seulement en cas d’échec"
-msgstr ""
-
-#: admin/views/tab-backups.php:114
-msgid "Après chaque sauvegarde"
+msgid "Sauvegardes conservées"
 msgstr ""
 
 #: admin/views/tab-backups.php:115
+msgid "Une de moins"
+msgstr ""
+
+#: admin/views/tab-backups.php:117
+msgid "Une de plus"
+msgstr ""
+
+#: admin/views/tab-backups.php:119
+msgid "Les plus anciennes sont supprimées automatiquement."
+msgstr ""
+
+#: admin/views/tab-backups.php:122
+msgid "Me prévenir par e-mail"
+msgstr ""
+
+#: admin/views/tab-backups.php:124
+msgid "En cas d’échec"
+msgstr ""
+
+#: admin/views/tab-backups.php:125
+msgid "Toujours"
+msgstr ""
+
+#: admin/views/tab-backups.php:126
 msgid "Jamais"
 msgstr ""
 
-#: admin/views/tab-backups.php:120
+#: admin/views/tab-backups.php:129
 msgid "Adresse de notification"
 msgstr ""
 
-#: admin/views/tab-backups.php:121
-msgid "Vide : adresse de l’administrateur du site."
-msgstr ""
-
-#: admin/views/tab-backups.php:128
+#: admin/views/tab-backups.php:137
 msgid "Enregistrer"
 msgstr ""
 
-#: admin/views/tab-backups.php:129
+#: admin/views/tab-backups.php:138
 msgid "Sauvegarder maintenant"
 msgstr ""
 
-#: admin/views/tab-backups.php:138
+#: admin/views/tab-backups.php:147
 msgid "État"
 msgstr ""
 
-#: admin/views/tab-backups.php:144
+#: admin/views/tab-backups.php:153
 msgid "Bon à savoir"
 msgstr ""
 
-#: admin/views/tab-backups.php:145
+#: admin/views/tab-backups.php:154
 msgid "Les sauvegardes sont conservées sur ce serveur, dans un dossier protégé. Téléchargez régulièrement une copie : elle vous protège aussi d’une panne de l’hébergement."
 msgstr ""
 
-#: admin/views/tab-backups.php:146
+#: admin/views/tab-backups.php:155
 msgid "WordPress déclenche les tâches planifiées lors des visites. Sur un site peu visité, demandez à votre hébergeur une tâche cron vers wp-cron.php pour une heure exacte."
 msgstr ""
 
-#: admin/views/tab-backups.php:153
+#: admin/views/tab-backups.php:161
 msgid "Sauvegardes disponibles"
 msgstr ""
 
-#: admin/views/tab-backups.php:161
+#: admin/views/tab-backups.php:168
 msgid "Historique"
 msgstr ""
 
@@ -664,263 +758,267 @@ msgstr ""
 msgid "Solution :"
 msgstr ""
 
-#: admin/js/admin.js:121 admin/js/admin.js:746
+#: admin/js/admin.js:127 admin/js/admin.js:767
 msgid "Durée :"
 msgstr ""
 
-#: admin/js/admin.js:169
+#: admin/js/admin.js:175
 msgid "Le serveur termine l’étape précédente…"
 msgstr ""
 
-#: admin/js/admin.js:198
+#: admin/js/admin.js:204
 msgid "Vérifiez votre connexion puis cliquez sur « Reprendre » : l’opération repartira du dernier point de sauvegarde."
 msgstr ""
 
-#: admin/js/admin.js:208 admin/js/admin.js:662
+#: admin/js/admin.js:214 admin/js/admin.js:683
 msgid "Nouvelle tentative"
 msgstr ""
 
-#: admin/js/admin.js:208 admin/js/admin.js:662
+#: admin/js/admin.js:214 admin/js/admin.js:683
 msgid "dans"
 msgstr ""
 
-#: admin/js/admin.js:229 admin/js/admin.js:643
+#: admin/js/admin.js:235 admin/js/admin.js:664
 msgid "Erreur inconnue."
 msgstr ""
 
-#: admin/js/admin.js:231 admin/js/admin.js:645
+#: admin/js/admin.js:237 admin/js/admin.js:666
 msgid "Reprendre"
 msgstr ""
 
-#: admin/js/admin.js:247
+#: admin/js/admin.js:253
 msgid "Annuler l’opération en cours ?"
 msgstr ""
 
-#: admin/js/admin.js:272
+#: admin/js/admin.js:278
 msgid "Restaurer cette sauvegarde ? Les fichiers et la base de données actuels du site seront remplacés par ceux de la sauvegarde."
 msgstr ""
 
-#: admin/js/admin.js:298
+#: admin/js/admin.js:304
 msgid "Aucune sauvegarde pour le moment. Activez les sauvegardes automatiques ou cliquez sur « Sauvegarder maintenant »."
 msgstr ""
 
-#: admin/js/admin.js:298
+#: admin/js/admin.js:304
 msgid "Aucun paquet pour le moment. Cliquez sur « Exporter le site » pour en créer un."
 msgstr ""
 
-#: admin/js/admin.js:304 admin/js/admin.js:832
+#: admin/js/admin.js:310 admin/js/admin.js:901
 msgid "automatique"
 msgstr ""
 
-#: admin/js/admin.js:304 admin/js/admin.js:832
+#: admin/js/admin.js:310 admin/js/admin.js:901
 msgid "manuelle"
 msgstr ""
 
-#: admin/js/admin.js:306 admin/js/admin.js:832
+#: admin/js/admin.js:312 admin/js/admin.js:901
 msgid "base de données seule"
 msgstr ""
 
-#: admin/js/admin.js:310
+#: admin/js/admin.js:316
 msgid "protégé"
 msgstr ""
 
-#: admin/js/admin.js:313
+#: admin/js/admin.js:319
 msgid "migration directe"
 msgstr ""
 
-#: admin/js/admin.js:316
+#: admin/js/admin.js:322
 msgid "avertissement(s)"
 msgstr ""
 
-#: admin/js/admin.js:320
+#: admin/js/admin.js:326
 msgid "Restaurer"
 msgstr ""
 
-#: admin/js/admin.js:327 admin/js/admin.js:327 admin/js/admin.js:845
+#: admin/js/admin.js:331
+msgid "Télécharger"
+msgstr ""
+
+#: admin/js/admin.js:333 admin/js/admin.js:333 admin/js/admin.js:914
 msgid "Journal"
 msgstr ""
 
-#: admin/js/admin.js:329 admin/js/admin.js:329
+#: admin/js/admin.js:335 admin/js/admin.js:335
 msgid "Supprimer"
 msgstr ""
 
-#: admin/js/admin.js:331
+#: admin/js/admin.js:337
 msgid "Supprimer définitivement cette sauvegarde ?"
 msgstr ""
 
-#: admin/js/admin.js:331
+#: admin/js/admin.js:337
 msgid "Supprimer définitivement ce paquet ?"
 msgstr ""
 
-#: admin/js/admin.js:348
+#: admin/js/admin.js:354
 msgid "Mot de passe de installer.php (pour installer cette sauvegarde sur un autre serveur)"
 msgstr ""
 
-#: admin/js/admin.js:353
+#: admin/js/admin.js:359
 msgid "fichiers"
 msgstr ""
 
-#: admin/js/admin.js:354
+#: admin/js/admin.js:360
 msgid "tables"
 msgstr ""
 
-#: admin/js/admin.js:408
+#: admin/js/admin.js:423
 msgid "Le mot de passe doit contenir au moins 8 caractères."
 msgstr ""
 
-#: admin/js/admin.js:408
+#: admin/js/admin.js:423
 msgid "Allongez-le, utilisez « Générer », ou laissez le champ vide pour qu’un mot de passe soit généré."
 msgstr ""
 
-#: admin/js/admin.js:442 admin/js/admin.js:776 includes/class-ajax.php:49
+#: admin/js/admin.js:463 admin/js/admin.js:797 includes/class-ajax.php:49
 msgid "Rechargez la page et réessayez."
 msgstr ""
 
-#: admin/js/admin.js:461
+#: admin/js/admin.js:482
 msgid "Générer une clé permettra à un autre site de REMPLACER entièrement ce site. Continuer ?"
 msgstr ""
 
-#: admin/js/admin.js:470
+#: admin/js/admin.js:491
 msgid "Valable jusqu’au"
 msgstr ""
 
-#: admin/js/admin.js:488
+#: admin/js/admin.js:509
 msgid "Clé copiée. Collez-la dans l’onglet « Migration directe » du site source."
 msgstr ""
 
-#: admin/js/admin.js:499
+#: admin/js/admin.js:520
 msgid "Clé révoquée."
 msgstr ""
 
-#: admin/js/admin.js:511
+#: admin/js/admin.js:532
 msgid "Collez d’abord la clé de migration."
 msgstr ""
 
-#: admin/js/admin.js:511
+#: admin/js/admin.js:532
 msgid "Générez-la dans l’onglet « Migration directe » du site de destination."
 msgstr ""
 
-#: admin/js/admin.js:514
+#: admin/js/admin.js:535
 msgid "Le site de destination sera entièrement remplacé par ce site. Continuer ?"
 msgstr ""
 
-#: admin/js/admin.js:698
+#: admin/js/admin.js:719
 msgid "Envoi de l’archive"
 msgstr ""
 
-#: admin/js/admin.js:701
+#: admin/js/admin.js:722
 msgid "Vérifiez votre connexion puis cliquez sur « Reprendre » : l’envoi repartira là où il s’est arrêté."
 msgstr ""
 
-#: admin/js/admin.js:706
+#: admin/js/admin.js:727
 msgid "Vérification de l’archive"
 msgstr ""
 
-#: admin/js/admin.js:716
+#: admin/js/admin.js:737
 msgid "Déchiffrement de l’archive"
 msgstr ""
 
-#: admin/js/admin.js:720
+#: admin/js/admin.js:741
 msgid "Installeur prêt"
 msgstr ""
 
-#: admin/js/admin.js:723 includes/class-exporter.php:624
+#: admin/js/admin.js:744 includes/class-exporter.php:625
 msgid "Terminé"
 msgstr ""
 
-#: admin/js/admin.js:728
+#: admin/js/admin.js:749
 msgid "Cliquez sur « Reprendre » : l’import repartira du dernier point de sauvegarde."
 msgstr ""
 
-#: admin/js/admin.js:735
+#: admin/js/admin.js:756
 msgid "Choisissez d’abord l’archive à importer."
 msgstr ""
 
-#: admin/js/admin.js:735 includes/class-upload-import.php:111
+#: admin/js/admin.js:756 includes/class-upload-import.php:111
 msgid "Fichier archive-….zip (ou .lwb, .lwbenc) téléchargé depuis l’onglet « Exporter » du site source."
 msgstr ""
 
-#: admin/js/admin.js:751
+#: admin/js/admin.js:772
 msgid "Interrompre l’envoi ? Vous pourrez le reprendre en choisissant à nouveau le même fichier."
 msgstr ""
 
-#: admin/js/admin.js:759
+#: admin/js/admin.js:780
 msgid "Préparation de l’envoi…"
 msgstr ""
 
-#: admin/js/admin.js:772
+#: admin/js/admin.js:793
 msgid "Reprise de l’envoi à"
 msgstr ""
 
-#: admin/js/admin.js:781
+#: admin/js/admin.js:850
 msgid "Ce site sera entièrement remplacé par le contenu de l’archive. Continuer ?"
 msgstr ""
 
-#: admin/js/admin.js:816
+#: admin/js/admin.js:885
 msgid "Activées"
 msgstr ""
 
-#: admin/js/admin.js:816
+#: admin/js/admin.js:885 includes/class-admin.php:251
 msgid "Désactivées"
 msgstr ""
 
-#: admin/js/admin.js:817
+#: admin/js/admin.js:886
 msgid "Prochaine sauvegarde"
 msgstr ""
 
-#: admin/js/admin.js:817
+#: admin/js/admin.js:886
 msgid "En cours…"
 msgstr ""
 
-#: admin/js/admin.js:818
+#: admin/js/admin.js:887
 msgid "Dernière sauvegarde"
 msgstr ""
 
-#: admin/js/admin.js:818 admin/js/admin.js:842
+#: admin/js/admin.js:887 admin/js/admin.js:911
 msgid "échec"
 msgstr ""
 
-#: admin/js/admin.js:818
+#: admin/js/admin.js:887
 msgid "Aucune"
 msgstr ""
 
-#: admin/js/admin.js:819
+#: admin/js/admin.js:888
 msgid "Espace utilisé"
 msgstr ""
 
-#: admin/js/admin.js:821
+#: admin/js/admin.js:890
 msgid "Espace libre sur le serveur"
 msgstr ""
 
-#: admin/js/admin.js:828
+#: admin/js/admin.js:897
 msgid "Aucune sauvegarde effectuée pour le moment."
 msgstr ""
 
-#: admin/js/admin.js:832
+#: admin/js/admin.js:901
 msgid "site complet"
 msgstr ""
 
-#: admin/js/admin.js:842
+#: admin/js/admin.js:911
 msgid "réussie"
 msgstr ""
 
-#: admin/js/admin.js:895
+#: admin/js/admin.js:971
 msgid "Sauvegarde terminée."
 msgstr ""
 
-#: admin/js/admin.js:918
+#: admin/js/admin.js:994
 msgid "Prochaine sauvegarde :"
 msgstr ""
 
-#: admin/js/admin.js:986
+#: admin/js/admin.js:1062
 msgid "Version"
 msgstr ""
 
-#: admin/js/admin.js:986
+#: admin/js/admin.js:1062
 msgid "disponible"
 msgstr ""
 
-#: admin/js/admin.js:1001
+#: admin/js/admin.js:1077
 msgid "Vérification…"
 msgstr ""
 
@@ -1086,7 +1184,7 @@ msgstr ""
 msgid "Lien de téléchargement invalide ou expiré."
 msgstr ""
 
-#: includes/class-direct-transfer.php:1211 includes/class-ajax.php:223
+#: includes/class-direct-transfer.php:1211 includes/class-ajax.php:232
 msgid "Fichier introuvable."
 msgstr ""
 
@@ -1152,39 +1250,39 @@ msgstr ""
 msgid "Utilisez au moins 8 caractères, ou laissez le champ vide."
 msgstr ""
 
-#: includes/class-ajax.php:101
+#: includes/class-ajax.php:109
 msgid "Cette opération est introuvable ou a expiré."
 msgstr ""
 
-#: includes/class-ajax.php:102
+#: includes/class-ajax.php:110
 msgid "Relancez l’export."
 msgstr ""
 
-#: includes/class-ajax.php:200
+#: includes/class-ajax.php:209
 msgid "Suppression impossible."
 msgstr ""
 
-#: includes/class-ajax.php:201 includes/class-exporter.php:444
+#: includes/class-ajax.php:210 includes/class-exporter.php:445
 msgid "Vérifiez les permissions du dossier de stockage."
 msgstr ""
 
-#: includes/class-ajax.php:215 includes/class-updater.php:465 includes/class-admin.php:118
+#: includes/class-ajax.php:224 includes/class-updater.php:465 includes/class-admin.php:118
 msgid "Accès refusé."
 msgstr ""
 
-#: includes/class-ajax.php:263
+#: includes/class-ajax.php:272
 msgid "Réglages enregistrés."
 msgstr ""
 
-#: includes/class-ajax.php:323
+#: includes/class-ajax.php:332
 msgid "Adresse définitive du site invalide."
 msgstr ""
 
-#: includes/class-ajax.php:324
+#: includes/class-ajax.php:333
 msgid "Saisissez une URL complète, par exemple https://www.mon-site.fr, ou laissez le champ vide."
 msgstr ""
 
-#: includes/class-ajax.php:381
+#: includes/class-ajax.php:390
 msgid "Réglages des sauvegardes enregistrés."
 msgstr ""
 
@@ -1228,53 +1326,177 @@ msgstr ""
 msgid "Vérifiez que wp-content/uploads existe et est accessible en écriture (permissions 755)."
 msgstr ""
 
+#: includes/class-admin.php:60
+msgid "Exporter"
+msgstr ""
+
 #: includes/class-admin.php:72
 msgid "Lwb Migration : migration terminée, les fichiers d’installation restants ont été supprimés."
 msgstr ""
 
-#: includes/class-admin.php:123
+#: includes/class-admin.php:140
+msgid "Deux choix, un bouton. Vous obtenez un seul fichier, à importer sur le nouveau site."
+msgstr ""
+
+#: includes/class-admin.php:143
 msgid "Migration directe"
 msgstr ""
 
-#: includes/class-admin.php:124
-msgid "Importer"
-msgstr ""
-
-#: includes/class-admin.php:125
-msgid "Sauvegardes"
-msgstr ""
-
-#: includes/class-admin.php:126
-msgid "Paramètres"
+#: includes/class-admin.php:144
+msgid "De serveur à serveur, avec une clé. Rien à télécharger sur votre ordinateur."
 msgstr ""
 
 #: includes/class-admin.php:147
+msgid "Importer un site"
+msgstr ""
+
+#: includes/class-admin.php:148
+msgid "Un seul fichier, un clic. Le site est restauré ici, avec ses adresses mises à jour."
+msgstr ""
+
+#: includes/class-admin.php:151
+msgid "Sauvegardes"
+msgstr ""
+
+#: includes/class-admin.php:152
+msgid "Votre site se sauvegarde tout seul. Chaque sauvegarde se restaure en un clic."
+msgstr ""
+
+#: includes/class-admin.php:155
+msgid "Paramètres"
+msgstr ""
+
+#: includes/class-admin.php:156 includes/class-admin.php:259
+msgid "Fichiers et tables exclus, format et chiffrement de l’archive."
+msgstr ""
+
+#: includes/class-admin.php:222
+msgid "Deux fois par jour"
+msgstr ""
+
+#: includes/class-admin.php:223
+msgid "Tous les jours"
+msgstr ""
+
+#: includes/class-admin.php:224
+msgid "Toutes les semaines"
+msgstr ""
+
+#: includes/class-admin.php:225
+msgid "Tous les mois"
+msgstr ""
+
+#: includes/class-admin.php:230
+msgid "Un seul fichier, à importer sur le nouveau site en un clic."
+msgstr ""
+
+#. translators: %d: nombre de paquets.
+#: includes/class-admin.php:232
+msgid "Aucun paquet pour le moment"
+msgstr ""
+
+#: includes/class-admin.php:236
+msgid "De serveur à serveur, avec une clé. Rien à télécharger."
+msgstr ""
+
+#. translators: %s: heure d'expiration.
+#: includes/class-admin.php:238
+#, php-format
+msgid "Clé active jusqu’à %s"
+msgstr ""
+
+#: includes/class-admin.php:238
+msgid "Aucune clé active"
+msgstr ""
+
+#: includes/class-admin.php:242
+msgid "Déposez le fichier d’un site et cliquez sur Restaurer."
+msgstr ""
+
+#: includes/class-admin.php:243
+msgid "Remplace ce site"
+msgstr ""
+
+#: includes/class-admin.php:247
+msgid "Automatiques, restaurables en un clic."
+msgstr ""
+
+#. translators: 1: fréquence, 2: heure.
+#: includes/class-admin.php:250
+#, php-format
+msgid "%1$s à %2$s"
+msgstr ""
+
+#. translators: %s: date.
+#: includes/class-admin.php:255
+#, php-format
+msgid "Dernière : %s"
+msgstr ""
+
+#: includes/class-admin.php:255
+#, php-format
+msgid "Dernière : échec le %s"
+msgstr ""
+
+#: includes/class-admin.php:260
+msgid "Réglages recommandés"
+msgstr ""
+
+#: includes/class-admin.php:260
+msgid "Réglages personnalisés"
+msgstr ""
+
+#: includes/class-admin.php:273
+msgid "Sauvegarde automatique réussie"
+msgstr ""
+
+#: includes/class-admin.php:273
+msgid "Sauvegarde réussie"
+msgstr ""
+
+#: includes/class-admin.php:274
+msgid "Sauvegarde en échec"
+msgstr ""
+
+#: includes/class-admin.php:286
+msgid "Migration directe envoyée"
+msgstr ""
+
+#: includes/class-admin.php:286
+msgid "Paquet de migration créé"
+msgstr ""
+
+#: includes/class-admin.php:287
+msgid "protégé par mot de passe"
+msgstr ""
+
+#: includes/class-admin.php:314
 msgid "Version de PHP"
 msgstr ""
 
-#: includes/class-admin.php:157
+#: includes/class-admin.php:324
 msgid "Format d’archive"
 msgstr ""
 
-#: includes/class-admin.php:158
+#: includes/class-admin.php:325
 msgid "LWB (repli sans compression)"
 msgstr ""
 
-#: includes/class-admin.php:162
+#: includes/class-admin.php:329
 msgid "Durée d’une étape"
 msgstr ""
 
 #. translators: 1: budget en secondes, 2: max_execution_time.
-#: includes/class-admin.php:164
+#: includes/class-admin.php:331
 #, php-format
 msgid "%1$s s (max_execution_time : %2$s)"
 msgstr ""
 
-#: includes/class-admin.php:164
+#: includes/class-admin.php:331
 msgid "illimité"
 msgstr ""
 
-#: includes/class-admin.php:168
+#: includes/class-admin.php:335
 msgid "Mémoire PHP"
 msgstr ""
 
@@ -1424,94 +1646,94 @@ msgstr ""
 msgid "Donnez les permissions 755 au dossier wp-content/uploads."
 msgstr ""
 
-#: includes/class-exporter.php:162
+#: includes/class-exporter.php:163
 msgid "L’étape précédente est encore en cours sur le serveur…"
 msgstr ""
 
 #. translators: %s: message d'erreur technique.
-#: includes/class-exporter.php:220
+#: includes/class-exporter.php:221
 #, php-format
 msgid "Erreur inattendue : %s"
 msgstr ""
 
-#: includes/class-exporter.php:221
+#: includes/class-exporter.php:222
 msgid "Relancez l’opération ; elle reprendra au dernier point de sauvegarde. Si l’erreur persiste, téléchargez le journal et transmettez-le au support."
 msgstr ""
 
-#: includes/class-exporter.php:288
+#: includes/class-exporter.php:289
 msgid "Liste des fichiers introuvable."
 msgstr ""
 
-#: includes/class-exporter.php:288 includes/class-exporter.php:340
+#: includes/class-exporter.php:289 includes/class-exporter.php:341
 msgid "Annulez cet export et relancez-le."
 msgstr ""
 
-#: includes/class-exporter.php:340
+#: includes/class-exporter.php:341
 msgid "Le dump SQL est introuvable."
 msgstr ""
 
-#: includes/class-exporter.php:444
+#: includes/class-exporter.php:445
 msgid "Impossible de déplacer l’archive dans le dossier des paquets."
 msgstr ""
 
-#: includes/class-exporter.php:616
+#: includes/class-exporter.php:617
 msgid "Inventaire des fichiers"
 msgstr ""
 
-#: includes/class-exporter.php:617
+#: includes/class-exporter.php:618
 msgid "Export de la base de données"
 msgstr ""
 
-#: includes/class-exporter.php:618
+#: includes/class-exporter.php:619
 msgid "Création de l’archive"
 msgstr ""
 
-#: includes/class-exporter.php:619
+#: includes/class-exporter.php:620
 msgid "Chiffrement de l’archive"
 msgstr ""
 
-#: includes/class-exporter.php:620
+#: includes/class-exporter.php:621
 msgid "Génération de l’installeur"
 msgstr ""
 
-#: includes/class-exporter.php:621
+#: includes/class-exporter.php:622
 msgid "Transfert vers le site de destination"
 msgstr ""
 
-#: includes/class-exporter.php:622
+#: includes/class-exporter.php:623
 msgid "Préparation du site de destination"
 msgstr ""
 
-#: includes/class-exporter.php:623
+#: includes/class-exporter.php:624
 msgid "Installation sur le nouveau serveur"
 msgstr ""
 
 #. translators: 1: nombre de fichiers, 2: taille.
-#: includes/class-exporter.php:630
+#: includes/class-exporter.php:631
 #, php-format
 msgid "%1$s fichiers trouvés (%2$s)"
 msgstr ""
 
 #. translators: 1: table, 2: rang, 3: total, 4: lignes.
-#: includes/class-exporter.php:636
+#: includes/class-exporter.php:637
 #, php-format
 msgid "Table %1$s (%2$d/%3$d) – %4$s lignes exportées"
 msgstr ""
 
 #. translators: 1: fichiers traités, 2: total, 3: octets.
-#: includes/class-exporter.php:640
+#: includes/class-exporter.php:641
 #, php-format
 msgid "%1$s / %2$s fichiers archivés (%3$s)"
 msgstr ""
 
 #. translators: 1: reçu, 2: total.
-#: includes/class-exporter.php:645
+#: includes/class-exporter.php:646
 #, php-format
 msgid "%1$s / %2$s téléchargés par la destination"
 msgstr ""
 
 #. translators: 1: envoyé, 2: total.
-#: includes/class-exporter.php:647
+#: includes/class-exporter.php:648
 #, php-format
 msgid "%1$s / %2$s envoyés"
 msgstr ""

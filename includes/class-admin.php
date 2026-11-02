@@ -104,8 +104,8 @@ class Admin {
 	 */
 	private static function current_tab() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- simple navigation.
-		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'export';
-		return in_array( $tab, array( 'export', 'direct', 'import', 'backups', 'settings' ), true ) ? $tab : 'export';
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'home';
+		return in_array( $tab, array( 'home', 'export', 'direct', 'import', 'backups', 'settings' ), true ) ? $tab : 'home';
 	}
 
 	/**
@@ -118,13 +118,7 @@ class Admin {
 			wp_die( esc_html__( 'Accès refusé.', 'lwb-migration' ) );
 		}
 		$tab   = self::current_tab();
-		$tabs  = array(
-			'export'   => __( 'Exporter', 'lwb-migration' ),
-			'direct'   => __( 'Migration directe', 'lwb-migration' ),
-			'import'   => __( 'Importer', 'lwb-migration' ),
-			'backups'  => __( 'Sauvegardes', 'lwb-migration' ),
-			'settings' => __( 'Paramètres', 'lwb-migration' ),
-		);
+		$tabs  = self::sections();
 		$error = '';
 		try {
 			Security::storage_dir();
@@ -132,6 +126,179 @@ class Admin {
 			$error = $e->getMessage() . ' ' . $e->get_solution();
 		}
 		include LWB_MIGRATION_DIR . 'admin/views/page.php';
+	}
+
+	/**
+	 * Sections du tableau de bord : titre et phrase d'accroche.
+	 *
+	 * @return array[] slug => title, lead.
+	 */
+	public static function sections() {
+		return array(
+			'export'   => array(
+				'title' => __( 'Exporter le site', 'lwb-migration' ),
+				'lead'  => __( 'Deux choix, un bouton. Vous obtenez un seul fichier, à importer sur le nouveau site.', 'lwb-migration' ),
+			),
+			'direct'   => array(
+				'title' => __( 'Migration directe', 'lwb-migration' ),
+				'lead'  => __( 'De serveur à serveur, avec une clé. Rien à télécharger sur votre ordinateur.', 'lwb-migration' ),
+			),
+			'import'   => array(
+				'title' => __( 'Importer un site', 'lwb-migration' ),
+				'lead'  => __( 'Un seul fichier, un clic. Le site est restauré ici, avec ses adresses mises à jour.', 'lwb-migration' ),
+			),
+			'backups'  => array(
+				'title' => __( 'Sauvegardes', 'lwb-migration' ),
+				'lead'  => __( 'Votre site se sauvegarde tout seul. Chaque sauvegarde se restaure en un clic.', 'lwb-migration' ),
+			),
+			'settings' => array(
+				'title' => __( 'Paramètres', 'lwb-migration' ),
+				'lead'  => __( 'Fichiers et tables exclus, format et chiffrement de l’archive.', 'lwb-migration' ),
+			),
+		);
+	}
+
+	/**
+	 * URL d'une section (ou de l'accueil).
+	 *
+	 * @param string $slug Section, vide pour l'accueil.
+	 * @return string
+	 */
+	public static function url( $slug = '' ) {
+		$url = admin_url( 'admin.php?page=' . self::SLUG );
+		return '' === $slug ? $url : add_query_arg( 'tab', $slug, $url );
+	}
+
+	/**
+	 * Icône du tableau de bord (SVG en trait, décoratif).
+	 *
+	 * @param string $name Nom.
+	 * @param int    $size Taille en px.
+	 * @return string
+	 */
+	public static function icon( $name, $size = 24 ) {
+		$paths = array(
+			'export'   => '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+			'direct'   => '<rect x="2" y="4" width="8" height="12" rx="2"/><rect x="14" y="8" width="8" height="12" rx="2"/><path d="M10 10h4"/><path d="m12.5 8 2 2-2 2"/>',
+			'import'   => '<path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/>',
+			'backups'  => '<path d="M12 3a9 9 0 1 0 9 9"/><path d="M21 4v5h-5"/><path d="M12 8v4l3 2"/>',
+			'settings' => '<path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/><path d="M4 12h4"/><path d="M12 12h8"/><circle cx="10" cy="12" r="2"/><path d="M4 18h12"/><circle cx="18" cy="18" r="2"/>',
+			'arrow'    => '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
+			'back'     => '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
+			'check'    => '<path d="m5 12 5 5 9-10"/>',
+			'alert'    => '<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+			'file'     => '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+			'upload'   => '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+			'restore'  => '<path d="M12 3a9 9 0 1 0 9 9"/><path d="M21 4v5h-5"/>',
+			'key'      => '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3"/><path d="m16 6 3 3"/><path d="m14 8 2 2"/>',
+			'lock'     => '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+			'server'   => '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01"/><path d="M7 16.5h.01"/>',
+		);
+		$d     = isset( $paths[ $name ] ) ? $paths[ $name ] : $paths['arrow'];
+		return '<svg class="lwbm-svg" aria-hidden="true" width="' . (int) $size . '" height="' . (int) $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' . $d . '</svg>';
+	}
+
+	/**
+	 * Données de l'accueil : état de chaque section et activité récente.
+	 *
+	 * @return array tiles, activity.
+	 */
+	public static function home() {
+		$fmt      = get_option( 'time_format' );
+		$packages = array();
+		$backups  = array();
+		try {
+			$packages = Exporter::list_packages( 'migration' );
+			$backups  = Exporter::list_packages( 'backup' );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+		$key = Direct_Transfer::active_key();
+		$b   = Backups::settings();
+		$st  = Backups::state();
+
+		$n          = count( $packages );
+		$freq_names = array(
+			'twicedaily' => __( 'Deux fois par jour', 'lwb-migration' ),
+			'daily'      => __( 'Tous les jours', 'lwb-migration' ),
+			'weekly'     => __( 'Toutes les semaines', 'lwb-migration' ),
+			'monthly'    => __( 'Tous les mois', 'lwb-migration' ),
+		);
+		$last       = ! empty( $st['history'] ) ? $st['history'][0] : null;
+		$tiles      = array(
+			'export'   => array(
+				'text' => __( 'Un seul fichier, à importer sur le nouveau site en un clic.', 'lwb-migration' ),
+				/* translators: %d: nombre de paquets. */
+				'meta' => $n > 0 ? sprintf( _n( '%d paquet disponible', '%d paquets disponibles', $n, 'lwb-migration' ), $n ) : __( 'Aucun paquet pour le moment', 'lwb-migration' ),
+				'tone' => '',
+			),
+			'direct'   => array(
+				'text' => __( 'De serveur à serveur, avec une clé. Rien à télécharger.', 'lwb-migration' ),
+				/* translators: %s: heure d'expiration. */
+				'meta' => $key ? sprintf( __( 'Clé active jusqu’à %s', 'lwb-migration' ), wp_date( $fmt, $key['expires'] ) ) : __( 'Aucune clé active', 'lwb-migration' ),
+				'tone' => $key ? 'ok' : '',
+			),
+			'import'   => array(
+				'text' => __( 'Déposez le fichier d’un site et cliquez sur Restaurer.', 'lwb-migration' ),
+				'meta' => __( 'Remplace ce site', 'lwb-migration' ),
+				'tone' => 'warn',
+			),
+			'backups'  => array(
+				'text' => __( 'Automatiques, restaurables en un clic.', 'lwb-migration' ),
+				'meta' => $b['enabled']
+					/* translators: 1: fréquence, 2: heure. */
+					? sprintf( __( '%1$s à %2$s', 'lwb-migration' ), $freq_names[ $b['frequency'] ], sprintf( '%02d:00', (int) $b['hour'] ) )
+					: __( 'Désactivées', 'lwb-migration' ),
+				'tone' => $b['enabled'] ? ( $last && 'error' === $last['status'] ? 'error' : 'ok' ) : 'warn',
+				'sub'  => $last
+					/* translators: %s: date. */
+					? sprintf( 'ok' === $last['status'] ? __( 'Dernière : %s', 'lwb-migration' ) : __( 'Dernière : échec le %s', 'lwb-migration' ), wp_date( get_option( 'date_format' ) . ' ' . $fmt, (int) $last['time'] ) )
+					: '',
+			),
+			'settings' => array(
+				'text' => __( 'Fichiers et tables exclus, format et chiffrement de l’archive.', 'lwb-migration' ),
+				'meta' => Settings::get() == Settings::defaults() ? __( 'Réglages recommandés', 'lwb-migration' ) : __( 'Réglages personnalisés', 'lwb-migration' ), // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual -- comparaison de tableaux.
+				'tone' => '',
+			),
+		);
+
+		$activity = array();
+		foreach ( array_slice( $st['history'], 0, 4 ) as $h ) {
+			$ok         = 'ok' === $h['status'];
+			$activity[] = array(
+				'time'  => (int) $h['time'],
+				'icon'  => $ok ? 'check' : 'alert',
+				'tone'  => $ok ? 'ok' : 'error',
+				'title' => $ok
+					? ( 'auto' === ( isset( $h['trigger'] ) ? $h['trigger'] : '' ) ? __( 'Sauvegarde automatique réussie', 'lwb-migration' ) : __( 'Sauvegarde réussie', 'lwb-migration' ) )
+					: __( 'Sauvegarde en échec', 'lwb-migration' ),
+				'meta'  => $ok
+					? trim( ( 'database' === ( isset( $h['content'] ) ? $h['content'] : '' ) ? __( 'Base de données seule', 'lwb-migration' ) : __( 'Site complet', 'lwb-migration' ) ) . ( ! empty( $h['size'] ) ? ' · ' . Runtime::format_bytes( (int) $h['size'] ) : '' ) )
+					: (string) $h['message'],
+				'url'   => self::url( 'backups' ),
+			);
+		}
+		foreach ( array_slice( $packages, 0, 3 ) as $p ) {
+			$activity[] = array(
+				'time'  => (int) $p['created'],
+				'icon'  => 'export',
+				'tone'  => '',
+				'title' => ! empty( $p['direct'] ) ? __( 'Migration directe envoyée', 'lwb-migration' ) : __( 'Paquet de migration créé', 'lwb-migration' ),
+				'meta'  => trim( ( 'lwb' === $p['format'] ? 'LWB' : 'ZIP' ) . ' · ' . Runtime::format_bytes( (int) $p['archive_size'] ) . ( ! empty( $p['protected'] ) ? ' · ' . __( 'protégé par mot de passe', 'lwb-migration' ) : '' ) ),
+				'url'   => self::url( 'export' ),
+			);
+		}
+		usort(
+			$activity,
+			function ( $a, $b ) {
+				return $b['time'] - $a['time'];
+			}
+		);
+		return array(
+			'tiles'    => $tiles,
+			'activity' => array_slice( $activity, 0, 5 ),
+			'backups'  => count( $backups ),
+		);
 	}
 
 	/**
@@ -186,9 +353,10 @@ class Admin {
 				continue; // Vue.
 			}
 			$out[] = array(
-				'name' => $row['Name'],
-				'size' => Runtime::format_bytes( (int) $row['Data_length'] + (int) $row['Index_length'] ),
-				'own'  => 0 === strpos( $row['Name'], $wpdb->base_prefix ),
+				'name'  => $row['Name'],
+				'size'  => Runtime::format_bytes( (int) $row['Data_length'] + (int) $row['Index_length'] ),
+				'bytes' => (int) $row['Data_length'] + (int) $row['Index_length'],
+				'own'   => 0 === strpos( $row['Name'], $wpdb->base_prefix ),
 			);
 		}
 		return $out;

@@ -1,6 +1,6 @@
 <?php
 /**
- * Onglet « Sauvegardes ».
+ * Section « Sauvegardes ».
  *
  * @package LwbMigration
  */
@@ -18,115 +18,124 @@ $lwbm_days   = array(
 	6 => __( 'samedi', 'lwb-migration' ),
 	0 => __( 'dimanche', 'lwb-migration' ),
 );
+$lwbm_freqs  = array(
+	'twicedaily' => array( __( '2× par jour', 'lwb-migration' ), __( 'Sites très actifs', 'lwb-migration' ) ),
+	'daily'      => array( __( 'Chaque jour', 'lwb-migration' ), __( 'Recommandé', 'lwb-migration' ) ),
+	'weekly'     => array( __( 'Chaque semaine', 'lwb-migration' ), __( 'Sites peu modifiés', 'lwb-migration' ) ),
+	'monthly'    => array( __( 'Chaque mois', 'lwb-migration' ), __( 'Sites vitrines', 'lwb-migration' ) ),
+);
 $lwbm_tz     = wp_timezone_string();
 ?>
-<div class="lwbm-grid">
-	<section class="lwbm-card lwbm-card-main">
-		<div class="lwbm-card-head">
-			<span class="lwbm-icon lwbm-icon-primary" aria-hidden="true"><span class="dashicons dashicons-backup"></span></span>
-			<div>
-				<h2><?php esc_html_e( 'Sauvegardes automatiques', 'lwb-migration' ); ?></h2>
-				<p><?php esc_html_e( 'Votre site est sauvegardé tout seul, au rythme choisi. Chaque sauvegarde se restaure en un clic, ou s’installe sur un autre serveur avec son installer.php.', 'lwb-migration' ); ?></p>
-			</div>
-		</div>
+<div class="lwbm-split">
+	<section class="lwbm-card lwbm-split-main">
+		<form id="lwbm-backup-form" class="lwbm-backup-form" novalidate>
+			<label class="lwbm-toggle-card lwbm-toggle-card-lg" id="lwbm-b-enabled-card">
+				<span class="lwbm-toggle-icon"><?php echo \LwbMigration\Admin::icon( 'backups', 26 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?></span>
+				<span class="lwbm-toggle-text">
+					<span class="lwbm-choice-title"><?php esc_html_e( 'Sauvegardes automatiques', 'lwb-migration' ); ?></span>
+					<span class="lwbm-choice-text"><?php esc_html_e( 'En arrière-plan, par petites étapes, sans ralentir le site.', 'lwb-migration' ); ?></span>
+				</span>
+				<span class="lwbm-switch"><input type="checkbox" id="lwbm-b-enabled" name="enabled" value="1" <?php checked( $lwbm_b['enabled'] ); ?>><span aria-hidden="true"></span></span>
+			</label>
 
-		<form id="lwbm-backup-form" class="lwbm-settings lwbm-backup-form" novalidate>
-			<div class="lwbm-row">
-				<div class="lwbm-row-text">
-					<label for="lwbm-b-enabled"><?php esc_html_e( 'Activer les sauvegardes automatiques', 'lwb-migration' ); ?></label>
-					<p class="lwbm-hint"><?php esc_html_e( 'Elles s’exécutent en arrière-plan, par petites étapes, sans ralentir le site.', 'lwb-migration' ); ?></p>
-				</div>
-				<label class="lwbm-switch"><input type="checkbox" id="lwbm-b-enabled" name="enabled" value="1" <?php checked( $lwbm_b['enabled'] ); ?>><span aria-hidden="true"></span></label>
-			</div>
-
-			<fieldset class="lwbm-backup-fields" data-lwbm-backup-fields>
-				<div class="lwbm-row">
-					<div class="lwbm-row-text">
-						<label for="lwbm-b-frequency"><?php esc_html_e( 'Fréquence', 'lwb-migration' ); ?></label>
-					</div>
-					<select id="lwbm-b-frequency" name="frequency" class="lwbm-select">
-						<option value="twicedaily" <?php selected( $lwbm_b['frequency'], 'twicedaily' ); ?>><?php esc_html_e( 'Deux fois par jour', 'lwb-migration' ); ?></option>
-						<option value="daily" <?php selected( $lwbm_b['frequency'], 'daily' ); ?>><?php esc_html_e( 'Tous les jours', 'lwb-migration' ); ?></option>
-						<option value="weekly" <?php selected( $lwbm_b['frequency'], 'weekly' ); ?>><?php esc_html_e( 'Toutes les semaines', 'lwb-migration' ); ?></option>
-						<option value="monthly" <?php selected( $lwbm_b['frequency'], 'monthly' ); ?>><?php esc_html_e( 'Tous les mois', 'lwb-migration' ); ?></option>
-					</select>
-				</div>
-				<div class="lwbm-row" data-lwbm-when="weekly">
-					<div class="lwbm-row-text">
-						<label for="lwbm-b-weekday"><?php esc_html_e( 'Jour de la semaine', 'lwb-migration' ); ?></label>
-					</div>
-					<select id="lwbm-b-weekday" name="weekday" class="lwbm-select">
-						<?php foreach ( $lwbm_days as $lwbm_n => $lwbm_day ) : ?>
-							<option value="<?php echo esc_attr( $lwbm_n ); ?>" <?php selected( (int) $lwbm_b['weekday'], $lwbm_n ); ?>><?php echo esc_html( ucfirst( $lwbm_day ) ); ?></option>
+			<div class="lwbm-backup-fields" data-lwbm-backup-fields>
+				<fieldset class="lwbm-choices">
+					<legend class="lwbm-step-title"><?php esc_html_e( 'Fréquence', 'lwb-migration' ); ?></legend>
+					<div class="lwbm-choice-grid lwbm-choice-grid-4">
+						<?php foreach ( $lwbm_freqs as $lwbm_v => $lwbm_f ) : ?>
+							<label class="lwbm-choice lwbm-choice-sm">
+								<input type="radio" name="frequency" value="<?php echo esc_attr( $lwbm_v ); ?>" <?php checked( $lwbm_b['frequency'], $lwbm_v ); ?>>
+								<span class="lwbm-choice-body">
+									<span class="lwbm-choice-title"><?php echo esc_html( $lwbm_f[0] ); ?></span>
+									<span class="lwbm-choice-text"><?php echo esc_html( $lwbm_f[1] ); ?></span>
+								</span>
+							</label>
 						<?php endforeach; ?>
-					</select>
-				</div>
-				<div class="lwbm-row" data-lwbm-when="monthly">
-					<div class="lwbm-row-text">
-						<label for="lwbm-b-monthday"><?php esc_html_e( 'Jour du mois', 'lwb-migration' ); ?></label>
-						<p class="lwbm-hint"><?php esc_html_e( 'De 1 à 28, pour exister tous les mois.', 'lwb-migration' ); ?></p>
 					</div>
-					<select id="lwbm-b-monthday" name="monthday" class="lwbm-select">
-						<?php for ( $lwbm_d = 1; $lwbm_d <= 28; $lwbm_d++ ) : ?>
-							<option value="<?php echo esc_attr( $lwbm_d ); ?>" <?php selected( (int) $lwbm_b['monthday'], $lwbm_d ); ?>><?php echo esc_html( $lwbm_d ); ?></option>
-						<?php endfor; ?>
-					</select>
-				</div>
-				<div class="lwbm-row">
-					<div class="lwbm-row-text">
+				</fieldset>
+
+				<fieldset class="lwbm-choices" data-lwbm-when="weekly">
+					<legend class="lwbm-step-title"><?php esc_html_e( 'Jour', 'lwb-migration' ); ?></legend>
+					<div class="lwbm-chipset">
+						<?php foreach ( $lwbm_days as $lwbm_n => $lwbm_day ) : ?>
+							<label class="lwbm-chip-radio"><input type="radio" name="weekday" value="<?php echo esc_attr( $lwbm_n ); ?>" <?php checked( (int) $lwbm_b['weekday'], $lwbm_n ); ?>><span><?php echo esc_html( ucfirst( $lwbm_day ) ); ?></span></label>
+						<?php endforeach; ?>
+					</div>
+				</fieldset>
+
+				<div class="lwbm-inline-fields">
+					<div class="lwbm-field" data-lwbm-when="monthly">
+						<label for="lwbm-b-monthday"><?php esc_html_e( 'Jour du mois', 'lwb-migration' ); ?></label>
+						<select id="lwbm-b-monthday" name="monthday" class="lwbm-select">
+							<?php for ( $lwbm_d = 1; $lwbm_d <= 28; $lwbm_d++ ) : ?>
+								<option value="<?php echo esc_attr( $lwbm_d ); ?>" <?php selected( (int) $lwbm_b['monthday'], $lwbm_d ); ?>><?php echo esc_html( $lwbm_d ); ?></option>
+							<?php endfor; ?>
+						</select>
+					</div>
+					<div class="lwbm-field">
 						<label for="lwbm-b-hour"><?php esc_html_e( 'Heure', 'lwb-migration' ); ?></label>
+						<select id="lwbm-b-hour" name="hour" class="lwbm-select">
+							<?php for ( $lwbm_h = 0; $lwbm_h < 24; $lwbm_h++ ) : ?>
+								<option value="<?php echo esc_attr( $lwbm_h ); ?>" <?php selected( (int) $lwbm_b['hour'], $lwbm_h ); ?>><?php echo esc_html( sprintf( '%02d:00', $lwbm_h ) ); ?></option>
+							<?php endfor; ?>
+						</select>
 						<p class="lwbm-hint">
 							<?php
 							/* translators: %s: fuseau horaire du site. */
-							printf( esc_html__( 'Fuseau horaire du site : %s. Choisissez une heure creuse.', 'lwb-migration' ), esc_html( $lwbm_tz ) );
+							printf( esc_html__( 'Fuseau du site : %s. Choisissez une heure creuse.', 'lwb-migration' ), esc_html( $lwbm_tz ) );
 							?>
 						</p>
 					</div>
-					<select id="lwbm-b-hour" name="hour" class="lwbm-select">
-						<?php for ( $lwbm_h = 0; $lwbm_h < 24; $lwbm_h++ ) : ?>
-							<option value="<?php echo esc_attr( $lwbm_h ); ?>" <?php selected( (int) $lwbm_b['hour'], $lwbm_h ); ?>><?php echo esc_html( sprintf( '%02d:00', $lwbm_h ) ); ?></option>
-						<?php endfor; ?>
-					</select>
 				</div>
-				<div class="lwbm-row">
-					<div class="lwbm-row-text">
-						<label for="lwbm-b-content"><?php esc_html_e( 'Contenu', 'lwb-migration' ); ?></label>
-						<p class="lwbm-hint"><?php esc_html_e( 'La base de données seule est plus rapide et plus légère : idéale pour des sauvegardes fréquentes d’un site dont les fichiers changent peu.', 'lwb-migration' ); ?></p>
+
+				<fieldset class="lwbm-choices">
+					<legend class="lwbm-step-title"><?php esc_html_e( 'Contenu', 'lwb-migration' ); ?></legend>
+					<div class="lwbm-choice-grid">
+						<label class="lwbm-choice lwbm-choice-sm">
+							<input type="radio" name="content" value="full" <?php checked( $lwbm_b['content'], 'full' ); ?>>
+							<span class="lwbm-choice-body">
+								<span class="lwbm-choice-title"><?php esc_html_e( 'Site complet', 'lwb-migration' ); ?></span>
+								<span class="lwbm-choice-text"><?php esc_html_e( 'Fichiers et base de données.', 'lwb-migration' ); ?></span>
+							</span>
+						</label>
+						<label class="lwbm-choice lwbm-choice-sm">
+							<input type="radio" name="content" value="database" <?php checked( $lwbm_b['content'], 'database' ); ?>>
+							<span class="lwbm-choice-body">
+								<span class="lwbm-choice-title"><?php esc_html_e( 'Base de données seule', 'lwb-migration' ); ?></span>
+								<span class="lwbm-choice-text"><?php esc_html_e( 'Plus rapide et plus léger, idéal pour des sauvegardes fréquentes.', 'lwb-migration' ); ?></span>
+							</span>
+						</label>
 					</div>
-					<select id="lwbm-b-content" name="content" class="lwbm-select">
-						<option value="full" <?php selected( $lwbm_b['content'], 'full' ); ?>><?php esc_html_e( 'Site complet (fichiers + base de données)', 'lwb-migration' ); ?></option>
-						<option value="database" <?php selected( $lwbm_b['content'], 'database' ); ?>><?php esc_html_e( 'Base de données uniquement', 'lwb-migration' ); ?></option>
-					</select>
-				</div>
-				<div class="lwbm-row">
-					<div class="lwbm-row-text">
-						<label for="lwbm-b-keep"><?php esc_html_e( 'Sauvegardes conservées', 'lwb-migration' ); ?></label>
-						<p class="lwbm-hint"><?php esc_html_e( 'Au-delà, les plus anciennes sont supprimées automatiquement. Les paquets de migration ont leur propre limite.', 'lwb-migration' ); ?></p>
+				</fieldset>
+
+				<div class="lwbm-choice-grid">
+					<div class="lwbm-mini-card">
+						<label class="lwbm-step-title" for="lwbm-b-keep"><?php esc_html_e( 'Sauvegardes conservées', 'lwb-migration' ); ?></label>
+						<div class="lwbm-stepper">
+							<button type="button" class="lwbm-stepper-btn" data-lwbm-step="-1" aria-label="<?php esc_attr_e( 'Une de moins', 'lwb-migration' ); ?>">−</button>
+							<input type="number" id="lwbm-b-keep" name="keep" min="1" max="60" value="<?php echo esc_attr( $lwbm_b['keep'] ); ?>">
+							<button type="button" class="lwbm-stepper-btn" data-lwbm-step="1" aria-label="<?php esc_attr_e( 'Une de plus', 'lwb-migration' ); ?>">+</button>
+						</div>
+						<p class="lwbm-hint"><?php esc_html_e( 'Les plus anciennes sont supprimées automatiquement.', 'lwb-migration' ); ?></p>
 					</div>
-					<input type="number" id="lwbm-b-keep" name="keep" min="1" max="60" value="<?php echo esc_attr( $lwbm_b['keep'] ); ?>" class="lwbm-input lwbm-input-sm">
-				</div>
-				<div class="lwbm-row">
-					<div class="lwbm-row-text">
-						<label for="lwbm-b-notify"><?php esc_html_e( 'Notification par e-mail', 'lwb-migration' ); ?></label>
+					<div class="lwbm-mini-card">
+						<span class="lwbm-step-title" id="lwbm-b-notify-label"><?php esc_html_e( 'Me prévenir par e-mail', 'lwb-migration' ); ?></span>
+						<div class="lwbm-chipset" role="radiogroup" aria-labelledby="lwbm-b-notify-label">
+							<label class="lwbm-chip-radio"><input type="radio" name="notify" value="failure" <?php checked( $lwbm_b['notify'], 'failure' ); ?>><span><?php esc_html_e( 'En cas d’échec', 'lwb-migration' ); ?></span></label>
+							<label class="lwbm-chip-radio"><input type="radio" name="notify" value="always" <?php checked( $lwbm_b['notify'], 'always' ); ?>><span><?php esc_html_e( 'Toujours', 'lwb-migration' ); ?></span></label>
+							<label class="lwbm-chip-radio"><input type="radio" name="notify" value="never" <?php checked( $lwbm_b['notify'], 'never' ); ?>><span><?php esc_html_e( 'Jamais', 'lwb-migration' ); ?></span></label>
+						</div>
+						<div class="lwbm-field" data-lwbm-when-notify>
+							<label for="lwbm-b-email" class="screen-reader-text"><?php esc_html_e( 'Adresse de notification', 'lwb-migration' ); ?></label>
+							<input type="email" id="lwbm-b-email" name="email" class="lwbm-input lwbm-input-wide" value="<?php echo esc_attr( $lwbm_b['email'] ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>">
+						</div>
 					</div>
-					<select id="lwbm-b-notify" name="notify" class="lwbm-select">
-						<option value="failure" <?php selected( $lwbm_b['notify'], 'failure' ); ?>><?php esc_html_e( 'Seulement en cas d’échec', 'lwb-migration' ); ?></option>
-						<option value="always" <?php selected( $lwbm_b['notify'], 'always' ); ?>><?php esc_html_e( 'Après chaque sauvegarde', 'lwb-migration' ); ?></option>
-						<option value="never" <?php selected( $lwbm_b['notify'], 'never' ); ?>><?php esc_html_e( 'Jamais', 'lwb-migration' ); ?></option>
-					</select>
 				</div>
-				<div class="lwbm-row" data-lwbm-when-notify>
-					<div class="lwbm-row-text">
-						<label for="lwbm-b-email"><?php esc_html_e( 'Adresse de notification', 'lwb-migration' ); ?></label>
-						<p class="lwbm-hint"><?php esc_html_e( 'Vide : adresse de l’administrateur du site.', 'lwb-migration' ); ?></p>
-					</div>
-					<input type="email" id="lwbm-b-email" name="email" class="lwbm-input" value="<?php echo esc_attr( $lwbm_b['email'] ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>">
-				</div>
-			</fieldset>
+			</div>
 
 			<div class="lwbm-actions lwbm-backup-actions">
-				<button type="submit" class="lwbm-btn lwbm-btn-primary"><span class="dashicons dashicons-saved" aria-hidden="true"></span> <?php esc_html_e( 'Enregistrer', 'lwb-migration' ); ?></button>
-				<button type="button" class="lwbm-btn lwbm-btn-soft" id="lwbm-backup-now"><span class="dashicons dashicons-backup" aria-hidden="true"></span> <?php esc_html_e( 'Sauvegarder maintenant', 'lwb-migration' ); ?></button>
+				<button type="submit" class="lwbm-btn lwbm-btn-primary lwbm-btn-xl"><?php echo \LwbMigration\Admin::icon( 'check', 24 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?> <?php esc_html_e( 'Enregistrer', 'lwb-migration' ); ?></button>
+				<button type="button" class="lwbm-btn lwbm-btn-outline lwbm-btn-xl" id="lwbm-backup-now"><?php echo \LwbMigration\Admin::icon( 'restore', 24 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?> <?php esc_html_e( 'Sauvegarder maintenant', 'lwb-migration' ); ?></button>
 			</div>
 		</form>
 
@@ -135,13 +144,13 @@ $lwbm_tz     = wp_timezone_string();
 
 	<aside class="lwbm-side">
 		<section class="lwbm-card">
-			<h2 class="lwbm-card-title"><span class="dashicons dashicons-clock" aria-hidden="true"></span> <?php esc_html_e( 'État', 'lwb-migration' ); ?></h2>
+			<h2 class="lwbm-card-title"><?php esc_html_e( 'État', 'lwb-migration' ); ?></h2>
 			<ul class="lwbm-env" id="lwbm-backup-state">
 				<li><span class="lwbm-env-dot" aria-hidden="true"></span><span class="lwbm-env-label"><?php esc_html_e( 'Chargement…', 'lwb-migration' ); ?></span><strong></strong></li>
 			</ul>
 		</section>
-		<section class="lwbm-card lwbm-card-tip">
-			<h2 class="lwbm-card-title"><span class="dashicons dashicons-lightbulb" aria-hidden="true"></span> <?php esc_html_e( 'Bon à savoir', 'lwb-migration' ); ?></h2>
+		<section class="lwbm-card lwbm-card-soft">
+			<h2 class="lwbm-card-title"><?php esc_html_e( 'Bon à savoir', 'lwb-migration' ); ?></h2>
 			<p><?php esc_html_e( 'Les sauvegardes sont conservées sur ce serveur, dans un dossier protégé. Téléchargez régulièrement une copie : elle vous protège aussi d’une panne de l’hébergement.', 'lwb-migration' ); ?></p>
 			<p><?php esc_html_e( 'WordPress déclenche les tâches planifiées lors des visites. Sur un site peu visité, demandez à votre hébergeur une tâche cron vers wp-cron.php pour une heure exacte.', 'lwb-migration' ); ?></p>
 		</section>
@@ -149,16 +158,14 @@ $lwbm_tz     = wp_timezone_string();
 </div>
 
 <section class="lwbm-card">
-	<div class="lwbm-section-head">
-		<h2 class="lwbm-card-title"><span class="dashicons dashicons-portfolio" aria-hidden="true"></span> <?php esc_html_e( 'Sauvegardes disponibles', 'lwb-migration' ); ?></h2>
-	</div>
+	<h2 class="lwbm-card-title"><?php esc_html_e( 'Sauvegardes disponibles', 'lwb-migration' ); ?></h2>
 	<div class="lwbm-packages" id="lwbm-backups-body" data-lwbm-kind="backup">
 		<div class="lwbm-empty"><?php esc_html_e( 'Chargement…', 'lwb-migration' ); ?></div>
 	</div>
 </section>
 
 <section class="lwbm-card">
-	<h2 class="lwbm-card-title"><span class="dashicons dashicons-list-view" aria-hidden="true"></span> <?php esc_html_e( 'Historique', 'lwb-migration' ); ?></h2>
+	<h2 class="lwbm-card-title"><?php esc_html_e( 'Historique', 'lwb-migration' ); ?></h2>
 	<ol class="lwbm-history" id="lwbm-backup-history">
 		<li class="lwbm-empty"><?php esc_html_e( 'Chargement…', 'lwb-migration' ); ?></li>
 	</ol>

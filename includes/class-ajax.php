@@ -68,7 +68,15 @@ class Ajax {
 			);
 		}
 		try {
-			$job = Exporter::start( array( 'password' => $password ) );
+			$args    = array(
+				'password' => $password,
+				'db_only'  => 'database' === Security::post_text( 'content' ),
+			);
+			$encrypt = Security::post_text( 'encrypt' );
+			if ( '' !== $encrypt ) {
+				$args['encrypt'] = '1' === $encrypt;
+			}
+			$job = Exporter::start( $args );
 			wp_send_json_success(
 				array_merge(
 					array(
@@ -172,6 +180,7 @@ class Ajax {
 				'direct'    => ! empty( $p['direct'] ),
 				'warnings'  => (int) $p['warnings'],
 				'archive'   => $p['archive'],
+				'filename'  => Exporter::download_name( $p ),
 				'trigger'   => $p['trigger'],
 				'content'   => $p['content'],
 				'password'  => 'backup' === $kind && isset( $p['installer_password'] ) ? (string) $p['installer_password'] : '',

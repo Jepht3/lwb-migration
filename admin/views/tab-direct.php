@@ -11,13 +11,6 @@ $lwbm_key    = \LwbMigration\Direct_Transfer::active_key();
 $lwbm_http   = ! is_ssl() && ! \LwbMigration\Direct_Transfer::allow_http();
 $lwbm_direct = true;
 ?>
-<section class="lwbm-banner">
-	<span class="lwbm-icon lwbm-icon-primary" aria-hidden="true"><span class="dashicons dashicons-cloud-upload"></span></span>
-	<div>
-		<h2><?php esc_html_e( 'Migration directe, de serveur à serveur', 'lwb-migration' ); ?></h2>
-		<p><?php esc_html_e( 'Rien à télécharger sur votre ordinateur : le site est envoyé en HTTPS, par morceaux signés. Lwb Migration doit être installée sur les deux sites.', 'lwb-migration' ); ?></p>
-	</div>
-</section>
 
 <div class="lwbm-grid lwbm-grid-2 lwbm-direct">
 	<section class="lwbm-card">
@@ -34,7 +27,7 @@ $lwbm_direct = true;
 		<?php endif; ?>
 		<div class="lwbm-callout lwbm-callout-warn"><span class="dashicons dashicons-warning" aria-hidden="true"></span><p><?php esc_html_e( 'Tout le contenu de ce site (fichiers et base de données) sera remplacé par celui du site source.', 'lwb-migration' ); ?></p></div>
 		<div class="lwbm-actions">
-			<button type="button" class="lwbm-btn lwbm-btn-primary" id="lwbm-key-generate"><span class="dashicons dashicons-admin-network" aria-hidden="true"></span> <?php esc_html_e( 'Générer une clé de migration', 'lwb-migration' ); ?></button>
+			<button type="button" class="lwbm-btn lwbm-btn-primary lwbm-btn-lg" id="lwbm-key-generate"><?php echo \LwbMigration\Admin::icon( 'key', 22 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?> <?php esc_html_e( 'Générer une clé de migration', 'lwb-migration' ); ?></button>
 			<button type="button" class="lwbm-btn lwbm-btn-ghost" id="lwbm-key-revoke" <?php echo $lwbm_key ? '' : 'hidden'; ?>><?php esc_html_e( 'Révoquer la clé', 'lwb-migration' ); ?></button>
 		</div>
 		<div class="lwbm-keybox" id="lwbm-key-box" hidden>
@@ -69,12 +62,12 @@ $lwbm_direct = true;
 		<details class="lwbm-advanced" id="lwbm-direct-advanced">
 			<summary><?php esc_html_e( 'Options avancées : pare-feu, migration avant le changement de DNS', 'lwb-migration' ); ?></summary>
 			<div class="lwbm-field">
-				<label for="lwbm-direct-mode"><?php esc_html_e( 'Mode de transfert', 'lwb-migration' ); ?></label>
-				<select id="lwbm-direct-mode" class="lwbm-select">
-					<option value="auto"><?php esc_html_e( 'Automatique (recommandé)', 'lwb-migration' ); ?></option>
-					<option value="push"><?php esc_html_e( 'Envoi par ce site', 'lwb-migration' ); ?></option>
-					<option value="pull"><?php esc_html_e( 'Téléchargement par la destination', 'lwb-migration' ); ?></option>
-				</select>
+				<span class="lwbm-label" id="lwbm-direct-mode-label"><?php esc_html_e( 'Mode de transfert', 'lwb-migration' ); ?></span>
+				<div class="lwbm-chipset" role="radiogroup" aria-labelledby="lwbm-direct-mode-label">
+					<label class="lwbm-chip-radio"><input type="radio" name="lwbm-direct-mode" value="auto" checked><span><?php esc_html_e( 'Automatique (recommandé)', 'lwb-migration' ); ?></span></label>
+					<label class="lwbm-chip-radio"><input type="radio" name="lwbm-direct-mode" value="push"><span><?php esc_html_e( 'Envoi par ce site', 'lwb-migration' ); ?></span></label>
+					<label class="lwbm-chip-radio"><input type="radio" name="lwbm-direct-mode" value="pull"><span><?php esc_html_e( 'Téléchargement par la destination', 'lwb-migration' ); ?></span></label>
+				</div>
 				<p class="lwbm-hint"><?php esc_html_e( 'Si le pare-feu de l’hébergeur de destination bloque les envois, la destination télécharge elle-même l’archive grâce à un lien signé, temporaire et reprenable. En automatique, la bascule se fait toute seule.', 'lwb-migration' ); ?></p>
 			</div>
 			<div class="lwbm-field">
@@ -88,8 +81,8 @@ $lwbm_direct = true;
 				<p class="lwbm-hint"><?php esc_html_e( 'À renseigner si le WordPress de destination a été installé avec une adresse provisoire : le site sera installé avec cette adresse. Laissez vide pour garder celle de la destination.', 'lwb-migration' ); ?></p>
 			</div>
 		</details>
-		<button type="button" class="lwbm-btn lwbm-btn-primary lwbm-btn-lg" id="lwbm-direct-start">
-			<span class="dashicons dashicons-controls-play" aria-hidden="true"></span>
+		<button type="button" class="lwbm-btn lwbm-btn-primary lwbm-btn-xl" id="lwbm-direct-start">
+			<?php echo \LwbMigration\Admin::icon( 'direct', 26 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SVG statique. ?>
 			<?php esc_html_e( 'Lancer la migration directe', 'lwb-migration' ); ?>
 		</button>
 		<?php require __DIR__ . '/progress.php'; ?>
