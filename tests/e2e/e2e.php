@@ -762,6 +762,28 @@ if ( empty( $j['success'] ) ) {
 $d = drive_job( $admin, $src_url, $nonce, $j['data']['job'] );
 ok( ! empty( $d['installer_url'] ) && false !== strpos( $d['installer_url'], 'lwb_token=' ), 'installeur prêt sur la destination' );
 $export_log = file_get_contents( E2E_WORK . '/src/site/wp-content/uploads/' . basename( $storage ) . '/packages/' . $j['data']['job'] . '/log.php' );
+// Historique : la migration est inscrite, avec ses fichiers téléchargeables.
+$job_b = $j['data']['job'];
+list( , $hj ) = $admin->ajax( $src_url, $nonce, 'history', array( 'type' => 'direct' ) );
+$hist = isset( $hj['data']['html'] ) ? $hj['data']['html'] : '';
+ok( false !== strpos( $hist, 'data-lwbm-history="' . $job_b . '"' ) && false !== strpos( $hist, 'Réussie' ), 'historique : migration directe inscrite comme réussie' );
+preg_match( '/href="([^"]*package=' . $job_b . '[^"]*file=archive)"/', $hist, $hm );
+ok( ! empty( $hm[1] ) && false !== strpos( $hist, 'file=installer' ) && false !== strpos( $hist, 'file=log' ), 'historique : fichier du site, installer.php et journal téléchargeables' );
+if ( ! empty( $hm[1] ) ) {
+	$admin->download( html_entity_decode( $hm[1] ), E2E_WORK . '/history-archive.bin' );
+	ok( filesize( E2E_WORK . '/history-archive.bin' ) > 100000, 'historique : fichier du site téléchargé depuis l’historique (' . filesize( E2E_WORK . '/history-archive.bin' ) . ' octets)' );
+}
+ok( false !== strpos( $hist, 'lwb_token=' ), 'historique : lien de l’installeur de la destination conservé' );
+$home = $admin->request( "$src_url/wp-admin/admin.php?page=lwb-migration" )['body'];
+ok( false !== strpos( $home, 'Migration directe vers' ), 'accueil : migration directe dans l’activité récente' );
+layout_audit( array_filter( array( 'admin', $src_url, 'admin', E2E_PASS, (string) getenv( 'LWB_E2E_SHOTS' ) ) ), 'historique des migrations et activité récente remplis' );
+// Une opération annulée reste dans l'historique.
+list( , $jc ) = $admin->ajax( $src_url, $nonce, 'export_start', array() );
+$admin->ajax( $src_url, $nonce, 'job_cancel', array( 'job' => $jc['data']['job'] ) );
+$home = $admin->request( "$src_url/wp-admin/admin.php?page=lwb-migration" )['body'];
+ok( false !== strpos( $home, 'Export du site annulé' ), 'accueil : export annulé inscrit dans l’activité récente' );
+list( , $hj ) = $admin->ajax( $src_url, $nonce, 'history_delete', array( 'id' => $job_b, 'type' => 'direct' ) );
+ok( false === strpos( $hj['data']['html'], $job_b ) && is_dir( "$storage/packages/$job_b" ), 'historique : entrée retirée, paquet conservé' );
 ok( preg_match( '/en morceaux de ([\d,\s]+) Mo/u', $export_log ) || preg_match( '/en morceaux de/u', $export_log ), 'transfert en morceaux (post_max_size = 3M)' );
 
 $forged = new Client( 'forged' );
@@ -903,6 +925,8 @@ $job_c = $j['data']['job'];
 $d     = drive_job( $admin, $src_url, $nonce, $job_c );
 ok( ! empty( $d['installed'] ), 'site installé sur le nouveau serveur, piloté depuis la source (navigateur inutile)' ) || print( '    ' . json_encode( $d, JSON_UNESCAPED_UNICODE ) . "\n" );
 ok( isset( $d['hosts'] ) && '127.0.0.1 nouveau-site.test' === $d['hosts'], 'ligne du fichier hosts proposée : ' . ( isset( $d['hosts'] ) ? $d['hosts'] : '' ) );
+list( , $hj ) = $admin->ajax( $src_url, $nonce, 'history', array( 'type' => 'direct' ) );
+ok( false !== strpos( $hj['data']['html'], 'data-lwbm-history="' . $job_c . '"' ) && false !== strpos( $hj['data']['html'], 'site installé' ) && false !== strpos( $hj['data']['html'], 'Téléchargement par la destination' ), 'historique : site installé, bascule sur le téléchargement par la destination' );
 $log_c = (string) @file_get_contents( "$storage/packages/$job_c/log.php" );
 ok( false !== strpos( $log_c, 'adresse IP 127.0.0.1' ), 'journal : nouveau serveur joint par son adresse IP' );
 ok( false !== strpos( $log_c, 'la destination va télécharger' ), 'envoi bloqué par le pare-feu : bascule automatique sur le téléchargement par la destination' );
@@ -1097,13 +1121,14 @@ run_wp_php( $src_abs, 'require ABSPATH_ . "/wp-load.php"; delete_option( "lwb_te
 
 // 3) Sauvegarde manuelle de la base seule, depuis l'interface ; rétention à 2.
 list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_settings_save', array( 'backup' => array( 'enabled' => '1', 'frequency' => 'daily', 'hour' => '3', 'content' => 'database', 'keep' => '2', 'notify' => 'failure', 'email' => 'client@example.com' ) ) );
+$r0           = $j;
 $mails_before = count( $mails() );
 list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'backup_start' );
 ok( ! empty( $j['success'] ), '« Sauvegarder maintenant » démarré' );
 drive_job( $admin, $src_url, $nonce, $j['data']['job'] );
 list( $r, $j ) = $admin->ajax( $src_url, $nonce, 'packages', array( 'kind' => 'backup' ) );
 $ids = array_column( $j['data'], 'id' );
-ok( 2 === count( $j['data'] ) && 'database' === $j['data'][0]['content'] && 'manual' === $j['data'][0]['trigger'] && ! in_array( $auto_id, $ids, true ), 'rétention : 2 sauvegardes conservées, la plus ancienne supprimée' );
+ok( 2 === count( $j['data'] ) && 'database' === $j['data'][0]['content'] && 'manual' === $j['data'][0]['trigger'] && ! in_array( $auto_id, $ids, true ), 'rétention : 2 sauvegardes conservées, la plus ancienne supprimée' ) || print( '    ' . json_encode( array_map( function ( $p ) { return array( $p['id'], $p['date'], $p['content'], $p['trigger'], $p['size'] ); }, $j['data'] ) ) . ' auto=' . $auto_id . ' r=' . json_encode( $r0 ) . "\n" );
 list( $r, $jm ) = $admin->ajax( $src_url, $nonce, 'packages' );
 ok( count( $jm['data'] ) === $migration_count, 'paquets de migration intacts (limite séparée)' );
 ok( count( $mails() ) === $mails_before, 'notification « en cas d’échec » : aucun e-mail pour une réussite' );

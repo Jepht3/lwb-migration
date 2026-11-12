@@ -278,14 +278,73 @@ class Admin {
 				'url'   => self::url( 'backups' ),
 			);
 		}
+		try {
+			$history = History::entries();
+		} catch ( \Throwable $e ) {
+			$history = array();
+		}
+		foreach ( array_slice( $history, 0, 5 ) as $h ) {
+			$direct = 'direct' === $h['type'];
+			$dest   = preg_replace( '#^https?://#', '', '' !== $h['final_url'] ? $h['final_url'] : $h['destination'] );
+			$titles = $direct
+				? array(
+					/* translators: %s: site de destination. */
+					'ok'          => $h['installed'] ? __( 'Site migré vers %s', 'lwb-migration' ) : __( 'Migration directe vers %s : prête à installer', 'lwb-migration' ),
+					/* translators: %s: site de destination. */
+					'running'     => __( 'Migration directe vers %s en cours', 'lwb-migration' ),
+					/* translators: %s: site de destination. */
+					'error'       => __( 'Migration directe vers %s en échec', 'lwb-migration' ),
+					/* translators: %s: site de destination. */
+					'cancelled'   => __( 'Migration directe vers %s annulée', 'lwb-migration' ),
+					/* translators: %s: site de destination. */
+					'interrupted' => __( 'Migration directe vers %s interrompue', 'lwb-migration' ),
+				)
+				: array(
+					'ok'          => __( 'Export du site créé', 'lwb-migration' ),
+					'running'     => __( 'Export du site en cours', 'lwb-migration' ),
+					'error'       => __( 'Export du site en échec', 'lwb-migration' ),
+					'cancelled'   => __( 'Export du site annulé', 'lwb-migration' ),
+					'interrupted' => __( 'Export du site interrompu', 'lwb-migration' ),
+				);
+			$tones  = array(
+				'ok'          => 'ok',
+				'running'     => '',
+				'error'       => 'error',
+				'cancelled'   => '',
+				'interrupted' => 'warn',
+			);
+			$meta   = array();
+			if ( in_array( $h['status'], array( 'error' ), true ) && '' !== $h['message'] ) {
+				$meta[] = $h['message'];
+			}
+			if ( $h['size'] > 0 ) {
+				$meta[] = Runtime::format_bytes( (int) $h['size'] );
+			}
+			if ( isset( $h['files']['archive'] ) ) {
+				$meta[] = __( 'fichier du site téléchargeable', 'lwb-migration' );
+			}
+			$activity[] = array(
+				'time'  => (int) $h['started'],
+				'icon'  => 'ok' === $h['status'] ? 'check' : ( in_array( $h['status'], array( 'error', 'interrupted' ), true ) ? 'alert' : ( $direct ? 'direct' : 'export' ) ),
+				'tone'  => isset( $tones[ $h['status'] ] ) ? $tones[ $h['status'] ] : '',
+				'title' => sprintf( isset( $titles[ $h['status'] ] ) ? $titles[ $h['status'] ] : $titles['running'], '' !== $dest ? $dest : __( 'un autre site', 'lwb-migration' ) ),
+				'meta'  => implode( ' · ', $meta ),
+				'url'   => self::url( $direct ? 'direct' : 'export' ),
+			);
+		}
+		// Paquets antérieurs à l'historique (versions précédentes de l'extension).
+		$known = wp_list_pluck( $history, 'package' );
 		foreach ( array_slice( $packages, 0, 3 ) as $p ) {
+			if ( in_array( $p['id'], $known, true ) ) {
+				continue;
+			}
 			$activity[] = array(
 				'time'  => (int) $p['created'],
 				'icon'  => 'export',
 				'tone'  => '',
 				'title' => ! empty( $p['direct'] ) ? __( 'Migration directe envoyée', 'lwb-migration' ) : __( 'Paquet de migration créé', 'lwb-migration' ),
-				'meta'  => trim( ( 'lwb' === $p['format'] ? 'LWB' : 'ZIP' ) . ' · ' . Runtime::format_bytes( (int) $p['archive_size'] ) . ( ! empty( $p['protected'] ) ? ' · ' . __( 'protégé par mot de passe', 'lwb-migration' ) : '' ) ),
-				'url'   => self::url( 'export' ),
+				'meta'  => Runtime::format_bytes( (int) $p['archive_size'] ),
+				'url'   => self::url( ! empty( $p['direct'] ) ? 'direct' : 'export' ),
 			);
 		}
 		usort(
@@ -296,7 +355,7 @@ class Admin {
 		);
 		return array(
 			'tiles'    => $tiles,
-			'activity' => array_slice( $activity, 0, 5 ),
+			'activity' => array_slice( $activity, 0, 6 ),
 			'backups'  => count( $backups ),
 		);
 	}

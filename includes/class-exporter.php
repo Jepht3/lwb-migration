@@ -145,6 +145,7 @@ class Exporter {
 			$log->info( 'Tables exclues : ' . implode( ', ', $settings['exclude_tables'] ) );
 		}
 		$job->save();
+		History::begin( $job );
 		return $job;
 	}
 
@@ -193,6 +194,7 @@ class Exporter {
 			} while ( ! $rt->should_stop() );
 			$job->save();
 			$job->unlock();
+			self::track( $job );
 			if ( 'done' === $job->data['phase'] && 'backup' === ( isset( $job->data['kind'] ) ? $job->data['kind'] : '' ) && empty( $job->data['recorded'] ) ) {
 				$job->data['recorded'] = true;
 				$job->save();
@@ -202,8 +204,10 @@ class Exporter {
 		} catch ( Migration_Exception $e ) {
 			$log->error( $e->getMessage() . ( $e->get_solution() ? ' – ' . $e->get_solution() : '' ) );
 			++$job->data['errors'];
+			$job->data['history_phase'] = 'error';
 			$job->save();
 			$job->unlock();
+			History::failure( $job, $e->getMessage() );
 			return array(
 				'status'    => 'error',
 				'message'   => $e->getMessage(),
@@ -214,8 +218,10 @@ class Exporter {
 		} catch ( \Throwable $e ) {
 			$log->error( sprintf( 'Erreur PHP : %s (%s:%d)', $e->getMessage(), basename( $e->getFile() ), $e->getLine() ) );
 			++$job->data['errors'];
+			$job->data['history_phase'] = 'error';
 			$job->save();
 			$job->unlock();
+			History::failure( $job, $e->getMessage() );
 			return array(
 				'status'    => 'error',
 				'message'   => sprintf( /* translators: %s: message d'erreur technique. */ __( 'Erreur inattendue : %s', 'lwb-migration' ), $e->getMessage() ),
@@ -224,6 +230,23 @@ class Exporter {
 				'progress'  => self::progress( $job ),
 			);
 		}
+	}
+
+	/**
+	 * Met l'historique à jour quand la phase change (ou après une reprise réussie), pas à
+	 * chaque étape.
+	 *
+	 * @param Job $job Tâche.
+	 * @return void
+	 */
+	private static function track( Job $job ) {
+		$phase = (string) $job->data['phase'];
+		if ( isset( $job->data['history_phase'] ) && $job->data['history_phase'] === $phase ) {
+			return;
+		}
+		$job->data['history_phase'] = $phase;
+		$job->save();
+		History::progress( $job );
 	}
 
 	/**
@@ -476,6 +499,7 @@ class Exporter {
 		$meta = array(
 			'id'           => $job->id(),
 			'created'      => time(),
+			'created_at'   => microtime( true ),
 			'archive'      => $d['archive_name'],
 			'archive_size' => $archive_size,
 			'format'       => $d['format'],
@@ -709,7 +733,10 @@ class Exporter {
 		usort(
 			$out,
 			function ( $a, $b ) {
-				return $b['created'] - $a['created'];
+				// Deux paquets terminés dans la même seconde : départage à la microseconde.
+				$ta = isset( $a['created_at'] ) ? (float) $a['created_at'] : (float) $a['created'];
+				$tb = isset( $b['created_at'] ) ? (float) $b['created_at'] : (float) $b['created'];
+				return $tb <=> $ta;
 			}
 		);
 		return $out;

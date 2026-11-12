@@ -51,8 +51,8 @@ body.toplevel_page_lwb-migration { background: #F3F5FE; }
 .lwbm .dashicons { line-height: 1; }
 .lwbm .lwbm-svg { flex: none; display: block; }
 .lwbm p, .lwbm li { font-size: inherit; line-height: 1.55; }
-.lwbm a { color: var(--lwbm-primary); }
-.lwbm a:hover { color: var(--lwbm-primary-2); }
+.lwbm a:where(:not(.lwbm-btn)) { color: var(--lwbm-primary); }
+.lwbm a:where(:not(.lwbm-btn)):hover { color: var(--lwbm-primary-2); }
 .lwbm :focus-visible { outline: 3px solid var(--lwbm-accent); outline-offset: 3px; box-shadow: none; }
 
 /* ---------- En-tête ---------- */
@@ -446,3 +446,15 @@ a.lwbm-tile.is-featured:hover, a.lwbm-tile.is-featured:focus { color: #fff; box-
 	.lwbm-tiles { grid-template-columns: minmax(0, 1fr); }
 	.lwbm-tile-text { display: block; }
 }
+
+/* ---------- Historique des migrations ---------- */
+.lwbm-pill-err { background: var(--lwbm-err-soft); color: var(--lwbm-err); border-color: #fecaca; }
+.lwbm-migrations .lwbm-hint { margin: -4px 0 16px; }
+.lwbm-mig-icon { color: var(--lwbm-primary); }
+.lwbm-mig-item.is-error .lwbm-mig-icon { background: var(--lwbm-err-soft); color: var(--lwbm-err); }
+.lwbm-mig-item.is-ok .lwbm-mig-icon { background: var(--lwbm-ok-soft); color: var(--lwbm-ok-ink); }
+.lwbm-mig-item.is-interrupted .lwbm-mig-icon { background: #fffbeb; color: #92400e; }
+.lwbm-mig-dest { min-width: 0; overflow-wrap: anywhere; }
+.lwbm-mig-message { margin: 8px 0 0; font-size: 13.5px; color: var(--lwbm-text); }
+.lwbm-mig-item.is-error .lwbm-mig-message { color: var(--lwbm-err); }
+.lwbm-mig-log { max-height: 220px; overflow: auto; margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--lwbm-subtle); border: 1px solid var(--lwbm-line); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }

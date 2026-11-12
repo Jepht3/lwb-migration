@@ -4,7 +4,7 @@ Tags: migration, sauvegarde, clonage, déménagement, transfert
 Requires at least: 5.8
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.7.1
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -108,6 +108,12 @@ Partiellement : les domaines et chemins du réseau sont mis à jour pour un rés
 3. L’assistant installer.php.
 
 == Changelog ==
+
+= 1.8.0 =
+* Historique des migrations directes (onglet Migration directe) : chaque migration est inscrite dès son démarrage, avec sa destination, son mode de transfert, sa taille, sa durée et son résultat (réussie, en échec, annulée, interrompue). Le motif d'un échec et le journal restent consultables
+* Le fichier du site est d'abord créé sur la source : depuis l'historique, téléchargez le fichier du site, installer.php ou le journal tant qu'ils sont conservés, ou rouvrez l'installeur de la destination
+* Activité récente de l'accueil : migrations directes et exports (réussis, en cours ou en échec) en plus des sauvegardes
+* Correction : le texte des boutons-liens (« Ouvrir l'installeur sur la destination », « Télécharger le fichier du site »…) était invisible, bleu sur fond bleu
 
 = 1.7.1 =
 * Les nouvelles versions sont détectées plus vite : au plus tard une heure après leur publication, dès qu'un administrateur ouvre l'administration (au lieu de six heures auparavant)

@@ -110,3 +110,14 @@ $lwbm_direct = true;
 		</div>
 	</section>
 </div>
+
+<section class="lwbm-card lwbm-migrations">
+	<h2 class="lwbm-card-title"><?php esc_html_e( 'Historique des migrations directes', 'lwb-migration' ); ?></h2>
+	<p class="lwbm-hint"><?php esc_html_e( 'Chaque migration est inscrite dès son démarrage. Le fichier du site est d’abord créé ici : tant qu’il est conservé, vous pouvez le télécharger pour l’importer à la main.', 'lwb-migration' ); ?></p>
+	<div class="lwbm-packages" id="lwbm-history-body" data-lwbm-history-type="direct">
+		<?php
+		$lwbm_history_type = 'direct';
+		require __DIR__ . '/history.php';
+		?>
+	</div>
+</section>

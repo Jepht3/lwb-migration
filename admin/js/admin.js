@@ -256,11 +256,52 @@
 		this.cancelled = true;
 		this.stop();
 		this.panel.hidden = true;
-		post( 'job_cancel', { job: this.job } ).catch( function () {} );
+		post( 'job_cancel', { job: this.job } ).then( refreshHistory ).catch( function () {} );
 		if ( this.onFail ) {
 			this.onFail();
 		}
 	};
+
+	/* ------------------------------------------------------------------ */
+	/* Historique des migrations                                           */
+	/* ------------------------------------------------------------------ */
+
+	function refreshHistory() {
+		var body = $( '#lwbm-history-body' );
+		if ( ! body ) {
+			return;
+		}
+		post( 'history', { type: body.getAttribute( 'data-lwbm-history-type' ) || '' } ).then( function ( res ) {
+			if ( res.ok ) {
+				body.innerHTML = res.data.html;
+			}
+		} ).catch( function () {} );
+	}
+
+	function initHistory() {
+		var body = $( '#lwbm-history-body' );
+		if ( ! body ) {
+			return;
+		}
+		body.addEventListener( 'click', function ( e ) {
+			var btn = e.target.closest( '[data-lwbm-history-delete]' );
+			if ( ! btn || ! window.confirm( __( 'Retirer cette migration de l’historique ? Les fichiers déjà exportés restent disponibles dans « Exporter ».' ) ) ) {
+				return;
+			}
+			btn.disabled = true;
+			post( 'history_delete', { id: btn.getAttribute( 'data-lwbm-history-delete' ), type: body.getAttribute( 'data-lwbm-history-type' ) || '' } ).then( function ( res ) {
+				if ( res.ok ) {
+					body.innerHTML = res.data.html;
+				} else {
+					btn.disabled = false;
+					notice( res.data.message, res.data.solution );
+				}
+			} ).catch( function ( err ) {
+				btn.disabled = false;
+				notice( err.message );
+			} );
+		} );
+	}
 
 	/* ------------------------------------------------------------------ */
 	/* Onglet Exporter                                                     */
@@ -550,8 +591,10 @@
 					notice( res.data.message, res.data.solution );
 					return;
 				}
+				refreshHistory();
 				var runner = new Runner( panel, res.data.job, function ( d ) {
 					start.disabled = false;
+					refreshHistory();
 					if ( d.installed ) {
 						// Installé avant le changement de DNS, depuis ce site.
 						$( '[data-lwbm-site]', installed ).textContent = d.site_url || '';
@@ -564,6 +607,7 @@
 					result.hidden = false;
 				}, function () {
 					start.disabled = false;
+					refreshHistory();
 				} );
 				runner.show();
 				runner.update( res.data );
@@ -1106,6 +1150,7 @@
 		initUpdate();
 		initExport();
 		initDirect();
+		initHistory();
 		initImport();
 		initBackups();
 		initSettings();

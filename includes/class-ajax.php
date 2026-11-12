@@ -20,7 +20,7 @@ class Ajax {
 	 * @return void
 	 */
 	public static function register() {
-		$actions = array( 'export_start', 'job_step', 'job_cancel', 'packages', 'package_delete', 'settings_save', 'key_generate', 'key_revoke', 'direct_start', 'download', 'check_update', 'backup_settings_save', 'backup_start', 'backup_status', 'backup_restore' );
+		$actions = array( 'export_start', 'job_step', 'job_cancel', 'packages', 'package_delete', 'settings_save', 'key_generate', 'key_revoke', 'direct_start', 'download', 'check_update', 'backup_settings_save', 'backup_start', 'backup_status', 'backup_restore', 'history', 'history_delete' );
 		foreach ( $actions as $action ) {
 			add_action( 'wp_ajax_lwb_migration_' . $action, array( __CLASS__, $action ) );
 		}
@@ -137,6 +137,7 @@ class Ajax {
 			// Étape en cours : on supprimera quand même, l'étape échouera proprement.
 			$job->unlock();
 		}
+		History::cancelled( $job );
 		$job->delete();
 		wp_send_json_success();
 	}
@@ -372,6 +373,40 @@ class Ajax {
 		} catch ( \Throwable $e ) {
 			self::fail( $e );
 		}
+	}
+
+	/**
+	 * Historique rendu (migrations directes, exports ou tout).
+	 *
+	 * @return void
+	 */
+	public static function history() {
+		Security::check_ajax();
+		wp_send_json_success( array( 'html' => self::history_html( Security::post_text( 'type' ) ) ) );
+	}
+
+	/**
+	 * Retire une entrée de l'historique (les fichiers éventuels restent dans les exports).
+	 *
+	 * @return void
+	 */
+	public static function history_delete() {
+		Security::check_ajax();
+		History::delete( Security::post_text( 'id' ) );
+		wp_send_json_success( array( 'html' => self::history_html( Security::post_text( 'type' ) ) ) );
+	}
+
+	/**
+	 * HTML de la liste de l'historique.
+	 *
+	 * @param string $type direct|export|''.
+	 * @return string
+	 */
+	private static function history_html( $type ) {
+		$lwbm_history_type = in_array( $type, array( 'direct', 'export' ), true ) ? $type : '';
+		ob_start();
+		require LWB_MIGRATION_DIR . 'admin/views/history.php';
+		return (string) ob_get_clean();
 	}
 
 	/**

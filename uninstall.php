@@ -24,5 +24,6 @@ delete_option( 'lwb_migration_direct_key' );
 delete_option( 'lwb_migration_import' );
 delete_option( 'lwb_migration_backups' );
 delete_option( 'lwb_migration_backup_state' );
+delete_option( 'lwb_migration_history' );
 wp_clear_scheduled_hook( 'lwb_migration_backup' );
 wp_unschedule_hook( 'lwb_migration_backup_step' );
